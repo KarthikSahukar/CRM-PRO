@@ -18,9 +18,7 @@ jobs:
         with:
           python-version: 3.9
 
-      # --- THIS IS THE STEP YOU NEED TO ADD ---
       - name: Create Firebase Service Account Key
-      # This comment is new, to force a commit
         run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" > serviceAccountKey.json
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
