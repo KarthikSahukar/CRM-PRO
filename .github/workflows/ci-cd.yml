@@ -20,11 +20,23 @@ jobs:
           python-version: 3.9
 
       - name: Create Firebase Service Account Key
-        # This step takes the secret and writes it to the file
         run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" > serviceAccountKey.json
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
+      # --- NEW DEBUGGING STEP 1 ---
+      - name: 1. DEBUG - Check if file was created
+        run: |
+          echo "Listing all files in the directory:"
+          ls -la
+          
+      # --- NEW DEBUGGING STEP 2 ---
+      - name: 2. DEBUG - Check if secret is empty
+        run: |
+          echo "Checking secret content..."
+          echo "Secret's first 10 chars:"
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" | cut -c 1-10
+          
       - name: Build - Install Dependencies
         run: |
           pip install -r requirements.txt
