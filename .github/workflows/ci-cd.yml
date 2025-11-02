@@ -18,6 +18,11 @@ jobs:
         with:
           python-version: 3.9
 
+      - name: Create Firebase Service Account Key
+        run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" > serviceAccountKey.json
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
       # 1. Build Stage
       - name: Build - Install Dependencies
         run: |
