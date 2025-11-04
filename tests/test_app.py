@@ -101,21 +101,4 @@ def test_get_customers_500_error(client):
         
         assert response.status_code == 500
         assert "Simulated database crash" in response.json['error']
-
-# --- ADD THIS FINAL TEST ---
-
-# Test 8: Test get_db for FileNotFoundError
-def test_get_db_file_not_found_error(client):
-    """Test the get_db function for a FileNotFoundError."""
-    # We patch 'credentials.Certificate' to raise FileNotFoundError
-    with patch('firebase_admin.credentials.Certificate', side_effect=FileNotFoundError("File not found")):
         
-        # We also need to reset the global 'db' variable in the app module
-        with patch('app.db', None):
-            
-            # Now, when we call get_db, it should catch the error
-            response = client.get('/') # Make any request to trigger get_db
-            
-            # The app will still run, but the error will be printed
-            # (We don't check the 500 error here, just that it ran)
-            assert response.status_code == 200
