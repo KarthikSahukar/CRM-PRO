@@ -7,14 +7,11 @@ from flask import Flask, request, jsonify, render_template
 app = Flask(__name__)
 
 # --- Firebase Initialization ---
-# We will now use a global variable to hold the db
 db = None
 
 def get_db():
     """
     Returns a Firestore client, initializing the app if necessary.
-    This is "lazy" and only runs when a request needs the DB.
-    This stops pytest from crashing on import.
     """
     global db
     if db is None:
@@ -26,9 +23,10 @@ def get_db():
             print("Firebase Admin SDK already initialized.")
         except FileNotFoundError:
             print("FATAL ERROR: serviceAccountKey.json not found in runtime.")
-            # This will cause a 500 error, which is correct
+            # Return None to signal a failure
+            return None
             
-        db = firestore.client() # Now db is initialized
+        db = firestore.client()
     return db
 
 # --- HTML Rendering Routes ---
@@ -46,8 +44,11 @@ def login_page():
 @app.route('/api/customer', methods=['POST'])
 def create_customer():
     """Creates a new customer in the database."""
-    db_conn = get_db() # Get the DB connection
     try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+        
         data = request.json
         if not data.get('name') or not data.get('email'):
             return jsonify({"error": "Name and email are required"}), 400
@@ -69,8 +70,11 @@ def create_customer():
 @app.route('/api/customers', methods=['GET'])
 def get_customers():
     """Gets all customers for dropdowns."""
-    db_conn = get_db() # Get the DB connection
     try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+        
         customers = []
         docs = db_conn.collection('customers').stream()
         for doc in docs:
