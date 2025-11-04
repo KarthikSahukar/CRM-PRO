@@ -6,19 +6,30 @@ from flask import Flask, request, jsonify, render_template
 # Initialize Flask App
 app = Flask(__name__)
 
-# Initialize Firebase Admin SDK
-try:
-    cred = credentials.Certificate('serviceAccountKey.json')
-    firebase_admin.initialize_app(cred)
-    print("Firebase Admin SDK initialized successfully.")
-except ValueError:
-    print("Firebase Admin SDK already initialized.")
-except FileNotFoundError:
-    print("FATAL ERROR: serviceAccountKey.json not found.")
+# --- Firebase Initialization ---
+# We will now use a global variable to hold the db
+db = None
 
-# Get the firestore client.
-db = firestore.client()
-
+def get_db():
+    """
+    Returns a Firestore client, initializing the app if necessary.
+    This is "lazy" and only runs when a request needs the DB.
+    This stops pytest from crashing on import.
+    """
+    global db
+    if db is None:
+        try:
+            cred = credentials.Certificate('serviceAccountKey.json')
+            firebase_admin.initialize_app(cred)
+            print("Firebase Admin SDK initialized successfully.")
+        except ValueError:
+            print("Firebase Admin SDK already initialized.")
+        except FileNotFoundError:
+            print("FATAL ERROR: serviceAccountKey.json not found in runtime.")
+            # This will cause a 500 error, which is correct
+            
+        db = firestore.client() # Now db is initialized
+    return db
 
 # --- HTML Rendering Routes ---
 @app.route('/')
@@ -35,39 +46,38 @@ def login_page():
 @app.route('/api/customer', methods=['POST'])
 def create_customer():
     """Creates a new customer in the database."""
+    db_conn = get_db() # Get the DB connection
     try:
         data = request.json
         if not data.get('name') or not data.get('email'):
             return jsonify({"error": "Name and email are required"}), 400
 
-        customer_ref = db.collection('customers').document()
+        customer_ref = db_conn.collection('customers').document()
         customer_ref.set({
             'name': data.get('name'),
             'email': data.get('email'),
             'phone': data.get('phone', ''),
             'company': data.get('company', ''),
-            # This line fixes the E1101 error
             'createdAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
         })
 
         return jsonify({"success": True, "id": customer_ref.id}), 201
 
-    # This line fixes the W0718 error
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/customers', methods=['GET'])
 def get_customers():
     """Gets all customers for dropdowns."""
+    db_conn = get_db() # Get the DB connection
     try:
         customers = []
-        docs = db.collection('customers').stream()
+        docs = db_conn.collection('customers').stream()
         for doc in docs:
             customer = doc.to_dict()
             customer['id'] = doc.id
             customers.append(customer)
         return jsonify(customers), 200
-    # This line fixes the W0718 error
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
 
