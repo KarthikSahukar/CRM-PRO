@@ -11,13 +11,11 @@ def client():
 
 # Test for Epic 2: Create Customer (Success)
 def test_create_customer_success(client):
-    # Mock the database returned by the get_db() function
     mock_db = MagicMock()
     mock_ref = MagicMock()
     mock_ref.id = "new-cust-123"
     mock_db.collection.return_value.document.return_value = mock_ref
     
-    # We patch 'app.get_db' to return our mock_db
     with patch('app.get_db', return_value=mock_db):
         customer_data = {'name': 'Test User', 'email': 'test@example.com'}
         response = client.post('/api/customer', json=customer_data)
@@ -28,15 +26,19 @@ def test_create_customer_success(client):
 
 # Test for Epic 2: Create Customer (Failure)
 def test_create_customer_missing_name(client):
-    customer_data = {'email': 'test@example.com'}
-    response = client.post('/api/customer', json=customer_data)
+    # THIS TEST SHOULD NOT TOUCH THE DATABASE.
+    # It should fail validation first.
+    # We add a mock just in case, but it shouldn't be used.
+    mock_db = MagicMock()
+    with patch('app.get_db', return_value=mock_db):
+        customer_data = {'email': 'test@example.com'}
+        response = client.post('/api/customer', json=customer_data)
     
-    assert response.status_code == 400
-    assert 'Name and email are required' in response.json['error']
+        assert response.status_code == 400
+        assert 'Name and email are required' in response.json['error']
 
 # Test for Epic 2: Get Customers
 def test_get_customers_success(client):
-    # Mock the database returned by the get_db() function
     mock_db = MagicMock()
     mock_doc1 = MagicMock()
     mock_doc1.id = "cust_1"
