@@ -4,11 +4,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import werkzeug
 if not hasattr(werkzeug, '__version__'):
     werkzeug.__version__ = '3.0.0'
-
 import json
 import pytest
 from app import app
 from unittest.mock import MagicMock, patch
+# Add this import:
+from firebase_admin import firestore 
+# ... (rest of the file)
+
 
 @pytest.fixture
 def client():
@@ -250,49 +253,62 @@ def test_capture_lead_500_error(client):
         assert "Simulated lead database crash" in response.json['error']
 # --- Tests for Epic 3.2: Convert lead to opportunity ---
 
+# tests/test_app.py
+
+# ... (Previous tests) ...
+
+# --- Tests for Epic 3.2: Convert lead to opportunity ---
+
 def test_convert_lead_success(client, mocker):
     """Test the convert_lead_to_opportunity function succeeds."""
+    from unittest.mock import MagicMock, patch
+
     mock_db = MagicMock()
-    
-    # Mock the lead document that exists
+
+    # Mock the existing lead document
     mock_lead_doc = MagicMock()
     mock_lead_doc.exists = True
     mock_lead_doc.to_dict.return_value = {
-        'name': 'Convert Lead', 
-        'email': 'convert@example.com', 
-        'source': 'Web Form', 
+        'name': 'Convert Lead',
+        'email': 'convert@example.com',
+        'source': 'Web Form',
         'status': 'New'
     }
-    
-    # Mock the reference for the new opportunity
-    mock_opportunity_ref = MagicMock()
-    mock_opportunity_ref.id = "new-opp-789"
-    
-    # Mock the document() call chain
-    mock_db.collection.return_value.document.return_value.get.return_value = mock_lead_doc
-    
-    # Mock the .add() or .document().set() for opportunity creation
-    # Since app.py uses .document().set(), we mock the opportunity reference
-    mock_db.collection.return_value.document.side_effect = [
-        # First call is for the Lead document, so we return the mocked lead ref
-        MagicMock(id='lead-to-convert', get=lambda: mock_lead_doc, update=MagicMock()),
-        # Second call is for the new Opportunity document
-        mock_opportunity_ref
-    ]
 
+    # Mock Firestore document references
+    lead_ref_mock = MagicMock(id='lead-to-convert', get=lambda: mock_lead_doc, update=MagicMock())
+    opp_ref_mock = MagicMock(id='new-opp-789', set=MagicMock())
+
+    # Simulate multiple .document() calls dynamically (avoid StopIteration)
+    def document_side_effect(doc_id=None):
+        if doc_id == 'lead-to-convert':
+            return lead_ref_mock
+        else:
+            return opp_ref_mock
+
+    # Apply mocks
+    mock_db.collection.return_value.document.side_effect = document_side_effect
+
+    # Patch get_db to return our mock DB
     with patch('app.get_db', return_value=mock_db):
         response = client.post('/api/lead/lead-to-convert/convert')
-        
+
+        # Assertions
         assert response.status_code == 200
         assert response.json['success'] is True
         assert "converted" in response.json['message']
         assert response.json['opportunity_id'] == "new-opp-789"
-        
-        # Verify the lead was updated (status: Converted)
-        mock_db.collection('leads').document('lead-to-convert').update.assert_called_once()
-        # Verify a new opportunity was created
-        mock_db.collection('opportunities').document.assert_called()
 
+        # Verify the lead was updated (THIS IS THE CORRECTED ASSERTION)
+        lead_ref_mock.update.assert_called_once_with({
+            'status': 'Converted',
+            'convertedAt': firestore.SERVER_TIMESTAMP 
+        })
+        opp_ref_mock.set.assert_called_once()
+
+
+
+# ... (rest of the test file is unchanged) ...
 def test_convert_lead_not_found(client):
     """Test the convert_lead_to_opportunity function fails if lead is missing."""
     mock_db = MagicMock()
