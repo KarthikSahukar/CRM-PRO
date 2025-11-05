@@ -81,7 +81,6 @@ def get_customers():
         return jsonify(customers), 200
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
-# Add this new route to app.py
 
 @app.route('/api/customer/<string:customer_id>', methods=['GET'])
 def get_customer_details(customer_id):
@@ -99,8 +98,6 @@ def get_customer_details(customer_id):
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
     
-# Add this new route to app.py
-
 @app.route('/api/customer/<string:customer_id>', methods=['PUT'])
 def update_customer_details(customer_id):
     """Updates a customer's details by their ID."""
@@ -128,8 +125,6 @@ def update_customer_details(customer_id):
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
     
-# Add this new route to app.py
-
 @app.route('/api/customer/<string:customer_id>', methods=['DELETE'])
 def delete_customer(customer_id):
     """Deletes a customer by their ID."""
@@ -148,6 +143,7 @@ def delete_customer(customer_id):
 
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
+
 # --- API Route (NEW - Epic 3.1: Capture new leads) ---
 @app.route('/api/lead', methods=['POST'])
 def capture_lead():
@@ -169,71 +165,103 @@ def capture_lead():
             'name': name,
             'email': email,
             'source': source,
-            'status': 'New',
-            'assigned_to': None, 
+            'status': 'New', # Default status as per Story 3.4 context
+            'assigned_to': None, # Placeholder for Story 3.3
             'createdAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
         }
-        # Store the lead in the 'leads' collection
+        # Store the lead in a separate 'leads' collection
         doc_ref = db_conn.collection('leads').document()
         doc_ref.set(lead_data)
         
         return jsonify({'success': True, 'id': doc_ref.id}), 201
         
     except Exception as e: # pylint: disable=broad-except
-        # This print statement is crucial for debugging!
-        print(f"Error in capture_lead: {e}") 
         return jsonify({'success': False, 'error': str(e)}), 500
+# ... (Previous code including capture_lead function) ...
 
-# Placeholder for Story 3.2 and 3.3 (Convert/Assign) should go here
-# ...
-# --- API Route (NEW - Epic 3.4: Track opportunity status) ---
-@app.route('/api/opportunity/<string:opportunity_id>/status', methods=['PUT'])
-def update_opportunity_status(opportunity_id):
-    """Updates the stage/status of an existing sales opportunity."""
-    ALLOWED_STAGES = ['Qualification', 'Proposal', 'Negotiation', 'Won', 'Lost']
+# --- API Route (NEW - Epic 3.2: Convert lead to opportunity) ---
+@app.route('/api/lead/<string:lead_id>/convert', methods=['POST'])
+def convert_lead_to_opportunity(lead_id):
+    """Converts an existing lead into a sales opportunity."""
+    try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
 
+        lead_ref = db_conn.collection('leads').document(lead_id)
+        lead_doc = lead_ref.get()
+
+        if not lead_doc.exists:
+            return jsonify({"error": "Lead not found"}), 404
+        
+        lead_data = lead_doc.to_dict()
+
+        # 1. Update Lead Status
+        lead_ref.update({
+            'status': 'Converted',
+            'convertedAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        })
+
+        # 2. Create Opportunity Record (for tracking pipeline)
+        opportunity_data = {
+            'lead_id': lead_id,
+            'name': lead_data.get('name'),
+            'email': lead_data.get('email'),
+            'source': lead_data.get('source'),
+            'stage': 'Qualification', # Initial stage
+            'amount': 0.0, # Placeholder for potential deal size
+            'createdAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        }
+        opportunity_ref = db_conn.collection('opportunities').document()
+        opportunity_ref.set(opportunity_data)
+
+        return jsonify({
+            "success": True, 
+            "message": f"Lead {lead_id} converted to Opportunity.",
+            "opportunity_id": opportunity_ref.id
+        }), 200
+
+    except Exception as e: # pylint: disable=broad-except
+        return jsonify({'success': False, 'error': str(e)}), 500
+# app.py (Modified capture_lead function)
+
+
+@app.route('/api/lead/<string:lead_id>/assign', methods=['PUT'])
+def assign_lead(lead_id):
+    """Assigns an existing lead to a specified sales representative."""
     try:
         db_conn = get_db()
         if db_conn is None:
             return jsonify({"success": False, "error": "Database connection failed"}), 500
 
         data = request.json
-        new_stage = data.get('stage')
+        rep_id = data.get('rep_id')
+        rep_name = data.get('rep_name', 'Unspecified')
 
-        if not new_stage:
-            return jsonify({"error": "Stage is required in the request body"}), 400
-        
-        if new_stage not in ALLOWED_STAGES:
-            return jsonify({
-                "error": "Invalid stage provided.",
-                "valid_stages": ALLOWED_STAGES
-            }), 400
+        if not rep_id:
+            return jsonify({"error": "Sales rep ID (rep_id) is required for assignment"}), 400
 
-        opportunity_ref = db_conn.collection('opportunities').document(opportunity_id)
+        lead_ref = db_conn.collection('leads').document(lead_id)
         
-        # Check if the opportunity exists
-        if not opportunity_ref.get().exists:
-            return jsonify({"error": "Opportunity not found"}), 404
+        # Check if the lead exists
+        if not lead_ref.get().exists:
+            return jsonify({"error": "Lead not found"}), 404
         
-        # Update the stage
-        update_data = {
-            'stage': new_stage,
-            'updatedAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
-        }
-        
-        # If the stage is 'Won' or 'Lost', record the completion timestamp
-        if new_stage in ['Won', 'Lost']:
-            update_data['closedAt'] = firestore.SERVER_TIMESTAMP # pylint: disable=no-member
-        
-        opportunity_ref.update(update_data)
+        # Update the lead document
+        lead_ref.update({
+            'assigned_to_id': rep_id,
+            'assigned_to_name': rep_name,
+            'assignedAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        })
 
         return jsonify({
             "success": True, 
-            "message": f"Opportunity {opportunity_id} status updated to {new_stage}"
+            "message": f"Lead {lead_id} assigned to {rep_name} ({rep_id})"
         }), 200
 
     except Exception as e: # pylint: disable=broad-except
-        print(f"Error in update_opportunity_status: {e}") # Debugging line
+        print(f"Error in assign_lead: {e}") # Debugging line
         return jsonify({'success': False, 'error': str(e)}), 500
-if __name__ == '__main__':
-    app.run()
+
+# ... (End of app.py) ...
+# ... (after convert_lead_to_opportunity) ...

@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // ... (Your auth logic) ...
 
     const customerForm = document.getElementById("customer-form");
-    const leadForm = document.getElementById("lead-form"); // <-- ADDED: Lead Form Reference
+    const leadForm = document.getElementById("lead-form"); // NEW
     const ticketCustomerSelect = document.getElementById("ticket-customer");
 
     // Handle Customer Form (Epic 2)
@@ -36,7 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Handle Lead Form (Epic 3.1) - ADDED BLOCK
+    // Handle Lead Form (Epic 3.1) - NEW BLOCK
     if (leadForm) {
         leadForm.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -62,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
-    // END ADDED BLOCK
+    // END NEW BLOCK
 
     // Load customers into the dropdown (for Epic 4)
     async function loadCustomers() {
