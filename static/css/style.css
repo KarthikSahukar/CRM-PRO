@@ -81,13 +81,23 @@ button:hover {
     background-color: #003e99;
 }
 .login-box {
-    width: 300px;
-    margin: 100px auto;
+    /* We set a max-width for desktop, but let it shrink */
+    max-width: 350px; 
+    
+    /* On small screens, it will be 90% of the screen width */
+    width: 90%;
+    
+    /* Use 10% of the viewport height for the top/bottom margin */
+    margin: 10vh auto; 
+    
     padding: 30px;
     background: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    
+    /* This ensures padding doesn't add to the width */
+    box-sizing: border-box; 
 }
 .error {
     color: #de350b;
