@@ -248,6 +248,43 @@ def capture_lead():
         # ADDED LINE: Print the exception to the server console
         print(f"Error in capture_lead: {e}") 
         return jsonify({'success': False, 'error': str(e)}), 500
+# --- API Route (NEW - Epic 3.3: Assign lead to sales rep) ---
+@app.route('/api/lead/<string:lead_id>/assign', methods=['PUT'])
+def assign_lead(lead_id):
+    """Assigns an existing lead to a specified sales representative."""
+    try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+
+        data = request.json
+        rep_id = data.get('rep_id')
+        rep_name = data.get('rep_name', 'Unspecified')
+
+        if not rep_id:
+            return jsonify({"error": "Sales rep ID (rep_id) is required for assignment"}), 400
+
+        lead_ref = db_conn.collection('leads').document(lead_id)
+        
+        # Check if the lead exists
+        if not lead_ref.get().exists:
+            return jsonify({"error": "Lead not found"}), 404
+        
+        # Update the lead document
+        lead_ref.update({
+            'assigned_to_id': rep_id,
+            'assigned_to_name': rep_name,
+            'assignedAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        })
+
+        return jsonify({
+            "success": True, 
+            "message": f"Lead {lead_id} assigned to {rep_name} ({rep_id})"
+        }), 200
+
+    except Exception as e: # pylint: disable=broad-except
+        print(f"Error in assign_lead: {e}") # Debugging line
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ... (End of app.py) ...
 

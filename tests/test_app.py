@@ -334,3 +334,58 @@ def test_convert_lead_500_error(client):
         
         assert response.status_code == 500
         assert "Simulated conversion crash" in response.json['error']
+# --- Tests for Epic 3.3: Assign lead to sales rep ---
+
+def test_assign_lead_success(client):
+    """Test the assign_lead function succeeds."""
+    mock_db = MagicMock()
+    
+    # Mock the lead document that exists
+    mock_lead_doc = MagicMock()
+    mock_lead_doc.exists = True
+    
+    # Mock the document() call chain to return the existing lead
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_lead_doc
+    
+    with patch('app.get_db', return_value=mock_db):
+        assignment_data = {'rep_id': 'sales-rep-1', 'rep_name': 'Alice Smith'}
+        response = client.put('/api/lead/lead-to-assign/assign', json=assignment_data)
+        
+        assert response.status_code == 200
+        assert response.json['success'] is True
+        assert "assigned to Alice Smith" in response.json['message']
+        
+        # Verify the lead was updated with the correct data, including the timestamp
+        mock_db.collection.return_value.document.return_value.update.assert_called_once_with({
+            'assigned_to_id': 'sales-rep-1',
+            'assigned_to_name': 'Alice Smith',
+            'assignedAt': firestore.SERVER_TIMESTAMP 
+        })
+        
+def test_assign_lead_missing_rep_id(client):
+    """Test the assign_lead function fails if rep_id is missing."""
+    mock_db = MagicMock()
+    
+    with patch('app.get_db', return_value=mock_db):
+        assignment_data = {'rep_name': 'Alice Smith'} # Missing rep_id
+        response = client.put('/api/lead/lead-to-assign/assign', json=assignment_data)
+    
+        assert response.status_code == 400
+        assert 'Sales rep ID (rep_id) is required' in response.json['error']
+
+def test_assign_lead_not_found(client):
+    """Test the assign_lead function fails if lead is missing."""
+    mock_db = MagicMock()
+    
+    # Mock the lead document that does NOT exist
+    mock_lead_doc = MagicMock()
+    mock_lead_doc.exists = False
+    
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_lead_doc
+    
+    with patch('app.get_db', return_value=mock_db):
+        assignment_data = {'rep_id': 'sales-rep-1'}
+        response = client.put('/api/lead/non-existent-lead/assign', json=assignment_data)
+        
+        assert response.status_code == 404
+        assert 'Lead not found' in response.json['error']
