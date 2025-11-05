@@ -81,7 +81,6 @@ def get_customers():
         return jsonify(customers), 200
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
-# Add this new route to app.py
 
 @app.route('/api/customer/<string:customer_id>', methods=['GET'])
 def get_customer_details(customer_id):
@@ -99,8 +98,6 @@ def get_customer_details(customer_id):
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
     
-# Add this new route to app.py
-
 @app.route('/api/customer/<string:customer_id>', methods=['PUT'])
 def update_customer_details(customer_id):
     """Updates a customer's details by their ID."""
@@ -128,8 +125,6 @@ def update_customer_details(customer_id):
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
     
-# Add this new route to app.py
-
 @app.route('/api/customer/<string:customer_id>', methods=['DELETE'])
 def delete_customer(customer_id):
     """Deletes a customer by their ID."""
@@ -148,5 +143,40 @@ def delete_customer(customer_id):
 
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
+
+# --- API Route (NEW - Epic 3.1: Capture new leads) ---
+@app.route('/api/lead', methods=['POST'])
+def capture_lead():
+    """Captures a new lead from a form submission and stores it."""
+    try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+        
+        data = request.json
+        name = data.get('name')
+        email = data.get('email')
+        source = data.get('source')
+        
+        if not name or not email or not source:
+            return jsonify({'success': False, 'error': 'Name, email, and source are required'}), 400
+        
+        lead_data = {
+            'name': name,
+            'email': email,
+            'source': source,
+            'status': 'New', # Default status as per Story 3.4 context
+            'assigned_to': None, # Placeholder for Story 3.3
+            'createdAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        }
+        # Store the lead in a separate 'leads' collection
+        doc_ref = db_conn.collection('leads').document()
+        doc_ref.set(lead_data)
+        
+        return jsonify({'success': True, 'id': doc_ref.id}), 201
+        
+    except Exception as e: # pylint: disable=broad-except
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run()

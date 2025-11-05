@@ -1,3 +1,10 @@
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import werkzeug
+if not hasattr(werkzeug, '__version__'):
+    werkzeug.__version__ = '3.0.0'
+
 import json
 import pytest
 from app import app
@@ -212,3 +219,32 @@ def test_delete_customer_not_found(client):
         
         assert response.status_code == 404
         assert "Customer not found" in response.json['error']
+# --- Tests for Epic 3.1: Capture new leads ---
+
+def test_capture_lead_success(client):
+    """Test the capture_lead function succeeds."""
+    mock_db = MagicMock()
+    mock_ref = MagicMock()
+    mock_ref.id = "new-lead-456"
+    mock_db.collection.return_value.document.return_value = mock_ref
+
+    with patch('app.get_db', return_value=mock_db):
+        lead_data = {'name': 'Test Lead', 'email': 'lead@example.com', 'source': 'Web Form'}
+        response = client.post('/api/lead', json=lead_data)
+
+        assert response.status_code == 201
+        json_data = response.get_json()
+        assert json_data['success'] is True
+        assert json_data['id'] == "new-lead-456"
+
+
+def test_capture_lead_500_error(client):
+    """Test the capture_lead function for a generic 500 error."""
+    lead_data = {'name': 'Test Lead', 'email': 'lead@example.com', 'source': 'Web Form'}
+    
+    with patch('app.get_db', side_effect=Exception("Simulated lead database crash")):
+        
+        response = client.post('/api/lead', json=lead_data)
+        
+        assert response.status_code == 500
+        assert "Simulated lead database crash" in response.json['error']
