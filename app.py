@@ -98,5 +98,34 @@ def get_customer_details(customer_id):
 
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
+    
+# Add this new route to app.py
+
+@app.route('/api/customer/<string:customer_id>', methods=['PUT'])
+def update_customer_details(customer_id):
+    """Updates a customer's details by their ID."""
+    try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        data = request.json
+        # Basic validation: ensure they are sending at least one field to update
+        if not data or ('name' not in data and 'email' not in data and 'phone' not in data):
+            return jsonify({"error": "No update data provided"}), 400
+
+        customer_ref = db_conn.collection('customers').document(customer_id)
+        # Check if customer exists before trying to update
+        if not customer_ref.get().exists:
+            return jsonify({"error": "Customer not found"}), 404
+        
+        # Update the customer document
+        # 'merge=True' ensures we only update fields that are sent
+        customer_ref.set(data, merge=True)
+        
+        return jsonify({"success": True, "id": customer_id}), 200
+
+    except Exception as e: # pylint: disable=broad-except
+        return jsonify({"error": str(e)}), 500
 if __name__ == '__main__':
     app.run()
