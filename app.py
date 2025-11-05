@@ -148,6 +148,44 @@ def delete_customer(customer_id):
 
     except Exception as e: # pylint: disable=broad-except
         return jsonify({"error": str(e)}), 500
+# --- API Route (NEW - Epic 3.1: Capture new leads) ---
+@app.route('/api/lead', methods=['POST'])
+def capture_lead():
+    """Captures a new lead from a form submission and stores it."""
+    try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+        
+        data = request.json
+        name = data.get('name')
+        email = data.get('email')
+        source = data.get('source')
+        
+        if not name or not email or not source:
+            return jsonify({'success': False, 'error': 'Name, email, and source are required'}), 400
+        
+        lead_data = {
+            'name': name,
+            'email': email,
+            'source': source,
+            'status': 'New',
+            'assigned_to': None, 
+            'createdAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        }
+        # Store the lead in the 'leads' collection
+        doc_ref = db_conn.collection('leads').document()
+        doc_ref.set(lead_data)
+        
+        return jsonify({'success': True, 'id': doc_ref.id}), 201
+        
+    except Exception as e: # pylint: disable=broad-except
+        # This print statement is crucial for debugging!
+        print(f"Error in capture_lead: {e}") 
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Placeholder for Story 3.2 and 3.3 (Convert/Assign) should go here
+# ...
 # --- API Route (NEW - Epic 3.4: Track opportunity status) ---
 @app.route('/api/opportunity/<string:opportunity_id>/status', methods=['PUT'])
 def update_opportunity_status(opportunity_id):

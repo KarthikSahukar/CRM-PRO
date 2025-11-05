@@ -2,7 +2,7 @@ import json
 import pytest
 from app import app
 from unittest.mock import MagicMock, patch
-
+from firebase_admin import firestore
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
