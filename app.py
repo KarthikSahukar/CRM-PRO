@@ -241,9 +241,91 @@ def convert_lead_to_opportunity(lead_id):
 
     except Exception as e: # pylint: disable=broad-except
         return jsonify({'success': False, 'error': str(e)}), 500
-# app.py (Modified capture_lead function)
 
-# ... (all your existing imports like Flask, logger, datetime, firestore, etc.)
+
+@app.route('/api/lead/<string:lead_id>/assign', methods=['PUT'])
+def assign_lead(lead_id):
+    """Assigns an existing lead to a specified sales representative."""
+    try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+
+        data = request.json
+        rep_id = data.get('rep_id')
+        rep_name = data.get('rep_name', 'Unspecified')
+
+        if not rep_id:
+            return jsonify({"error": "Sales rep ID (rep_id) is required for assignment"}), 400
+
+        lead_ref = db_conn.collection('leads').document(lead_id)
+
+        if not lead_ref.get().exists:
+            return jsonify({"error": "Lead not found"}), 404
+
+        lead_ref.update({
+            'assigned_to_id': rep_id,
+            'assigned_to_name': rep_name,
+            'assignedAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        })
+
+        return jsonify({
+            "success": True,
+            "message": f"Lead {lead_id} assigned to {rep_name} ({rep_id})"
+        }), 200
+
+    except Exception as e: # pylint: disable=broad-except
+        logger.exception("Error in assign_lead: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/opportunity/<string:opportunity_id>/status', methods=['PUT'])
+def update_opportunity_status(opportunity_id):
+    """Updates the stage/status of an existing sales opportunity."""
+    ALLOWED_STAGES = ['Qualification', 'Proposal', 'Negotiation', 'Won', 'Lost']
+
+    try:
+        db_conn = get_db()
+        if db_conn is None:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+
+        data = request.json
+        new_stage = data.get('stage')
+
+        if not new_stage:
+            return jsonify({"error": "Stage is required in the request body"}), 400
+
+        if new_stage not in ALLOWED_STAGES:
+            return jsonify({
+                "error": "Invalid stage provided.",
+                "valid_stages": ALLOWED_STAGES
+            }), 400
+
+        opportunity_ref = db_conn.collection('opportunities').document(opportunity_id)
+
+        if not opportunity_ref.get().exists:
+            return jsonify({"error": "Opportunity not found"}), 404
+
+        update_data = {
+            'stage': new_stage,
+            'updatedAt': firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+        }
+
+        if new_stage in ['Won', 'Lost']:
+            update_data['closedAt'] = firestore.SERVER_TIMESTAMP # pylint: disable=no-member
+
+        opportunity_ref.update(update_data)
+
+        return jsonify({
+            "success": True,
+            "message": f"Opportunity {opportunity_id} status updated to {new_stage}"
+        }), 200
+
+    except Exception as e: # pylint: disable=broad-except
+        logger.exception("Error in update_opportunity_status: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/tickets', methods=['POST'])
 def create_support_ticket():
     """
