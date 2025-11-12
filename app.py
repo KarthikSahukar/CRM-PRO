@@ -3,7 +3,7 @@
 import logging
 import sys
 from datetime import datetime, timedelta, timezone
-import random
+import secrets
 import string
 from functools import lru_cache
 import os
@@ -44,8 +44,8 @@ def _init_firestore_client():
     except FileNotFoundError:
         logger.error("FATAL ERROR: serviceAccountKey.json not found.")
         raise
-    except Exception as e:
-        logger.error("Failed to initialize Firebase: %s", e)
+    except Exception:
+        logger.exception("Failed to initialize Firebase")
         raise
 
 def get_db():
@@ -73,7 +73,8 @@ def get_db_or_raise():
 def generate_referral_code(name=""):
     """Generates a simple, human-readable referral code."""
     prefix = name.upper().replace(" ", "")[:5] or "CRM"
-    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    alphabet = string.ascii_uppercase + string.digits
+    suffix = ''.join(secrets.choice(alphabet) for _ in range(4))
     return f"{prefix}-{suffix}"
 
 # --- HTML Rendering Routes ---
@@ -620,8 +621,8 @@ def add_points_on_purchase(db_conn, customer_id, purchase_amount):
             logger.info("Tier Check: %s is now %s", customer_id, result['new_tier'])
 
         return result
-    except Exception as e:
-        logger.error(f"Error in add_points_on_purchase: {e}")
+    except Exception:
+        logger.exception("Error in add_points_on_purchase")
         return None
 
 @app.route('/api/simulate-purchase', methods=['POST'])
@@ -675,6 +676,8 @@ def simulate_purchase():
         return jsonify({"error": "Internal Server Error"}), 500
 
 if __name__ == "__main__":
-    # Allow overriding the port via environment variable, default to 5000
+    # Allow overriding behaviour via environment variables; defaults are production safe.
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    debug_enabled = os.environ.get("FLASK_DEBUG", "0") == "1"
+    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    app.run(debug=debug_enabled, host=host, port=port)
