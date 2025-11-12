@@ -431,3 +431,121 @@ def test_update_opportunity_status_not_found(client):
         
         assert response.status_code == 404
         assert 'Opportunity not found' in response.json['error']
+
+# --- Tests for Epic 4 & 5 helper endpoints ---
+
+def test_get_loyalty_profile_success(client):
+    """Loyalty profile retrieval returns profile data."""
+    mock_db = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {'points': 200, 'tier': 'Silver'}
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.get('/api/loyalty/customer-123')
+
+    assert response.status_code == 200
+    assert response.json['tier'] == 'Silver'
+
+
+def test_get_loyalty_profile_not_found(client):
+    """Loyalty profile retrieval returns 404 when missing."""
+    mock_db = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.exists = False
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.get('/api/loyalty/customer-unknown')
+
+    assert response.status_code == 404
+    assert "Loyalty profile not found" in response.json['error']
+
+
+def test_redeem_points_success(client):
+    """Redeeming points returns updated balance."""
+    mock_db = MagicMock()
+    mock_db.collection.return_value.document.return_value = MagicMock()
+    mock_db.transaction.return_value = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.redeem_transaction', return_value=80):
+        response = client.post('/api/loyalty/customer-123/redeem', json={'points_to_redeem': 20})
+
+    assert response.status_code == 200
+    assert response.json['new_points_balance'] == 80
+
+
+def test_redeem_points_insufficient(client):
+    """Redeeming with insufficient points surfaces 400."""
+    mock_db = MagicMock()
+    mock_db.collection.return_value.document.return_value = MagicMock()
+    mock_db.transaction.return_value = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.redeem_transaction', side_effect=ValueError("Insufficient points")):
+        response = client.post('/api/loyalty/customer-123/redeem', json={'points_to_redeem': 200})
+
+    assert response.status_code == 400
+    assert "Insufficient points" in response.json['error']
+
+
+def test_use_referral_success(client):
+    """Referral usage awards points to referrer."""
+    mock_db = MagicMock()
+    loyalty_collection = MagicMock()
+    mock_db.collection.return_value = loyalty_collection
+
+    referrer_doc = MagicMock()
+    referrer_doc.id = 'referrer-1'
+    loyalty_collection.where.return_value.limit.return_value.stream.return_value = [referrer_doc]
+
+    referrer_ref = MagicMock()
+    loyalty_collection.document.return_value = referrer_ref
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.post('/api/loyalty/new-user/use-referral', json={'referral_code': 'CODE123'})
+
+    assert response.status_code == 200
+    referrer_ref.update.assert_called_once_with({'points': firestore.Increment(100)})
+
+
+def test_use_referral_invalid_code(client):
+    """Invalid referral code returns 404."""
+    mock_db = MagicMock()
+    loyalty_collection = MagicMock()
+    mock_db.collection.return_value = loyalty_collection
+    loyalty_collection.where.return_value.limit.return_value.stream.return_value = []
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.post('/api/loyalty/new-user/use-referral', json={'referral_code': 'CODE123'})
+
+    assert response.status_code == 404
+    assert "Invalid referral code" in response.json['error']
+
+
+def test_simulate_purchase_success(client):
+    """Simulate purchase awards points and reports tier."""
+    mock_db = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.add_points_on_purchase', return_value={"new_points": 120, "new_tier": "Silver"}):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 50})
+
+    assert response.status_code == 200
+    assert response.json['new_points_balance'] == 120
+    assert response.json['new_tier'] == "Silver"
+
+
+def test_simulate_purchase_profile_missing(client):
+    """Simulated purchase returns 404 when loyalty profile is missing."""
+    mock_db = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.add_points_on_purchase', return_value=None):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 10})
+
+    assert response.status_code == 404
+    assert "Loyalty profile not found" in response.json['error']
+
