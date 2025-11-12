@@ -54,6 +54,21 @@ def get_db():
     except Exception:
         return None
 
+def get_db_or_raise():
+    """
+    Returns a Firestore client or raises RuntimeError with a consistent message.
+    Ensures callers see a "Database connection failed" message rather than raw exceptions.
+    """
+    try:
+        db_conn = get_db()
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Database access failure")
+        raise RuntimeError("Database connection failed")
+
+    if db_conn is None:
+        raise RuntimeError("Database connection failed")
+    return db_conn
+
 def generate_referral_code(name=""):
     """Generates a simple, human-readable referral code."""
     prefix = name.upper().replace(" ", "")[:5] or "CRM"
@@ -86,10 +101,11 @@ def create_customer():
     Integration of Epic 2 (Karthik) and Epic 5 (Kaveri).
     """
     try:
-        db_conn = get_db()
-        if db_conn is None:
-            return jsonify({"error": "Database connection failed"}), 503
-        
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
         data = request.get_json(silent=True)
         if not data or not data.get('name') or not data.get('email'):
             return jsonify({"error": "Name and email are required"}), 400
@@ -136,8 +152,10 @@ def create_customer():
 def get_customers():
     """Gets all customers for dropdowns."""
     try:
-        db_conn = get_db()
-        if db_conn is None: return jsonify({"error": "Database failed"}), 503
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
         customers = []
         docs = db_conn.collection('customers').stream()
         for doc in docs:
@@ -146,24 +164,89 @@ def get_customers():
             customers.append(customer)
         return jsonify(customers), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error fetching customers: %s", e)
+        return jsonify({"error": "Internal Server Error"}), 500
+
+# --- Additional Customer CRUD operations ---
+
+@app.route('/api/customer/<string:customer_id>', methods=['GET'])
+def get_customer_details(customer_id):
+    """Gets a single customer's details by their ID."""
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        customer_ref = db_conn.collection('customers').document(customer_id)
+        customer = customer_ref.get()
+        if not customer.exists:
+            return jsonify({"error": "Customer not found"}), 404
+        return jsonify(customer.to_dict() or {}), 200
+    except Exception as e:
+        logger.exception("Error getting customer details for %s: %s", customer_id, e)
+        return jsonify({"error": "Internal Server Error"}), 500
+
+@app.route('/api/customer/<string:customer_id>', methods=['PUT'])
+def update_customer_details(customer_id):
+    """Updates a customer's details by their ID."""
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        data = request.get_json(silent=True) or {}
+        if not data or ('name' not in data and 'email' not in data and 'phone' not in data and 'company' not in data):
+            return jsonify({"error": "No update data provided"}), 400
+
+        customer_ref = db_conn.collection('customers').document(customer_id)
+        if not customer_ref.get().exists:
+            return jsonify({"error": "Customer not found"}), 404
+
+        customer_ref.set(data, merge=True)
+        return jsonify({"success": True, "id": customer_id}), 200
+    except Exception as e:
+        logger.exception("Error updating customer %s: %s", customer_id, e)
+        return jsonify({"error": "Internal Server Error"}), 500
+
+@app.route('/api/customer/<string:customer_id>', methods=['DELETE'])
+def delete_customer(customer_id):
+    """Deletes a customer by their ID."""
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        customer_ref = db_conn.collection('customers').document(customer_id)
+        if not customer_ref.get().exists:
+            return jsonify({"error": "Customer not found"}), 404
+
+        customer_ref.delete()
+        return jsonify({"success": True, "id": customer_id}), 200
+    except Exception as e:
+        logger.exception("Error deleting customer %s: %s", customer_id, e)
+        return jsonify({"error": "Internal Server Error"}), 500
 
 # --- API Routes (Epic 3: Leads & Opportunities) ---
 
 @app.route('/api/lead', methods=['POST'])
 def capture_lead():
     try:
-        db_conn = get_db()
-        if not db_conn: return jsonify({"error": "Database failed"}), 503
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
         data = request.get_json(silent=True)
         
-        if not data or not data.get('name') or not data.get('email'):
-            return jsonify({'success': False, 'error': 'Name and email required'}), 400
+        if not data or not data.get('name') or not data.get('email') or not data.get('source'):
+            return jsonify({'success': False, 'error': 'Name, email, and source are required'}), 400
 
         lead_data = {
             'name': data.get('name'),
             'email': data.get('email'),
-            'source': data.get('source', 'Web'),
+            'source': data.get('source'),
             'status': 'New',
             'createdAt': firestore.SERVER_TIMESTAMP
         }
@@ -172,7 +255,132 @@ def capture_lead():
         return jsonify({'success': True, 'id': doc_ref.id}), 201
     except Exception as e:
         logger.exception("Capture Lead Failed")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Internal Server Error'}), 500
+
+@app.route('/api/lead/<string:lead_id>/convert', methods=['POST'])
+def convert_lead_to_opportunity(lead_id):
+    """Converts an existing lead into a sales opportunity."""
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        lead_ref = db_conn.collection('leads').document(lead_id)
+        lead_doc = lead_ref.get()
+
+        if not lead_doc.exists:
+            return jsonify({"error": "Lead not found"}), 404
+
+        lead_data = lead_doc.to_dict() or {}
+
+        lead_ref.update({
+            'status': 'Converted',
+            'convertedAt': firestore.SERVER_TIMESTAMP
+        })
+
+        opportunity_ref = db_conn.collection('opportunities').document()
+        opportunity_data = {
+            'lead_id': lead_id,
+            'name': lead_data.get('name'),
+            'email': lead_data.get('email'),
+            'source': lead_data.get('source'),
+            'stage': 'Qualification',
+            'amount': 0.0,
+            'createdAt': firestore.SERVER_TIMESTAMP
+        }
+        opportunity_ref.set(opportunity_data)
+
+        return jsonify({
+            "success": True,
+            "message": f"Lead {lead_id} converted to Opportunity.",
+            "opportunity_id": opportunity_ref.id
+        }), 200
+    except Exception as e:
+        logger.exception("Error converting lead %s: %s", lead_id, e)
+        return jsonify({"error": "Internal Server Error"}), 500
+
+@app.route('/api/lead/<string:lead_id>/assign', methods=['PUT'])
+def assign_lead(lead_id):
+    """Assigns an existing lead to a specified sales representative."""
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        data = request.get_json(silent=True) or {}
+        rep_id = data.get('rep_id')
+        rep_name = data.get('rep_name', 'Unspecified')
+
+        if not rep_id:
+            return jsonify({"error": "Sales rep ID (rep_id) is required"}), 400
+
+        lead_ref = db_conn.collection('leads').document(lead_id)
+        lead_doc = lead_ref.get()
+        if not lead_doc.exists:
+            return jsonify({"error": "Lead not found"}), 404
+
+        lead_ref.update({
+            'assigned_to_id': rep_id,
+            'assigned_to_name': rep_name,
+            'assignedAt': firestore.SERVER_TIMESTAMP
+        })
+
+        return jsonify({
+            "success": True,
+            "message": f"Lead {lead_id} assigned to {rep_name} ({rep_id})"
+        }), 200
+    except Exception as e:
+        logger.exception("Error assigning lead %s: %s", lead_id, e)
+        return jsonify({"error": "Internal Server Error"}), 500
+
+@app.route('/api/opportunity/<string:opportunity_id>/status', methods=['PUT'])
+def update_opportunity_status(opportunity_id):
+    """Updates the stage/status of an existing sales opportunity."""
+    allowed_stages = ['Qualification', 'Proposal', 'Negotiation', 'Won', 'Lost']
+
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        data = request.get_json(silent=True) or {}
+        new_stage = data.get('stage')
+
+        if not new_stage:
+            return jsonify({"error": "Stage is required in the request body"}), 400
+
+        if new_stage not in allowed_stages:
+            return jsonify({
+                "error": "Invalid stage provided"
+            }), 400
+
+        opportunity_ref = db_conn.collection('opportunities').document(opportunity_id)
+        opportunity_doc = opportunity_ref.get()
+
+        if not opportunity_doc.exists:
+            return jsonify({"error": "Opportunity not found"}), 404
+
+        update_data = {
+            'stage': new_stage,
+            'updatedAt': firestore.SERVER_TIMESTAMP
+        }
+
+        if new_stage in ['Won', 'Lost']:
+            update_data['closedAt'] = firestore.SERVER_TIMESTAMP
+
+        opportunity_ref.update(update_data)
+
+        return jsonify({
+            "success": True,
+            "message": f"Opportunity {opportunity_id} status updated to {new_stage}"
+        }), 200
+
+    except Exception as e:
+        logger.exception("Error updating opportunity %s: %s", opportunity_id, e)
+        return jsonify({"error": "Internal Server Error"}), 500
 
 # --- API Routes (Epic 4: Support Tickets - Kaveri) ---
 
@@ -182,9 +390,10 @@ def tickets_endpoint():
     Support ticket endpoints.
     """
     try:
-        db_conn = get_db()
-        if db_conn is None:
-            return jsonify({"error": "Database unavailable"}), 503
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
 
         if request.method == 'GET':
             tickets = []
@@ -224,10 +433,13 @@ def tickets_endpoint():
         return jsonify({
             "success": True,
             "ticket_id": ticket_ref.id,
-            "sla_deadline": ticket_data['sla_deadline']
+            "customer_id": ticket_data['customer_id'],
+            "sla_deadline": ticket_data['sla_deadline'],
+            "status": ticket_data['status'],
+            "priority": ticket_data['priority']
         }), 201
 
-    except Exception as e:
+    except Exception:
         logger.exception("Error creating support ticket")
         return jsonify({"error": "Internal Server Error"}), 500
 
@@ -243,8 +455,10 @@ TIER_LEVELS = {
 @app.route('/api/loyalty/<string:customer_id>', methods=['GET'])
 def get_loyalty_profile(customer_id):
     try:
-        db_conn = get_db()
-        if not db_conn: return jsonify({"error": "Database unavailable"}), 503
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
 
         loyalty_ref = db_conn.collection('loyalty_profiles').document(customer_id)
         profile_doc = loyalty_ref.get()
@@ -307,8 +521,10 @@ def redeem_points(customer_id):
     Redeems points using a Transaction to prevent race conditions.
     """
     try:
-        db_conn = get_db()
-        if not db_conn: return jsonify({"error": "Database unavailable"}), 503
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
 
         data = request.get_json(silent=True)
         if not data or 'points_to_redeem' not in data:
@@ -341,8 +557,10 @@ def use_referral_code(customer_id):
     Applies referral code. The 'customer_id' in URL is the NEW user.
     """
     try:
-        db_conn = get_db()
-        if not db_conn: return jsonify({"error": "Database unavailable"}), 503
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
 
         data = request.get_json(silent=True)
         code_used = data.get('referral_code') if data else None
@@ -402,9 +620,10 @@ def simulate_purchase():
     Temporary helper endpoint to simulate a purchase and award loyalty points.
     """
     try:
-        db_conn = get_db()
-        if not db_conn:
-            return jsonify({"error": "Database unavailable"}), 503
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
 
         data = request.get_json(silent=True) or {}
         customer_id = data.get('customer_id')

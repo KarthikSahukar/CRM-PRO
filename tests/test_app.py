@@ -81,8 +81,8 @@ def test_create_customer_500_error(client):
         
         response = client.post('/api/customer', json=customer_data)
         
-        assert response.status_code == 500
-        assert "Simulated database crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 
 # Test 7: Test get_customers endpoint for 500 error
 def test_get_customers_500_error(client):
@@ -91,8 +91,8 @@ def test_get_customers_500_error(client):
         
         response = client.get('/api/customers')
         
-        assert response.status_code == 500
-        assert "Simulated database crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 
 # Test 8: Test get_db for FileNotFoundError
 def test_get_db_file_not_found_error(client):
@@ -103,8 +103,8 @@ def test_get_db_file_not_found_error(client):
         
         response = client.get('/api/customers')
         
-        # The app should now correctly return a 500 error
-        assert response.status_code == 500
+        # The app should now correctly return a 503 error
+        assert response.status_code == 503
         assert "Database connection failed" in response.json['error']
 
 # Add these new tests to the end of tests/test_app.py
@@ -153,7 +153,7 @@ def test_update_customer_success(client):
     with patch('app.get_db', return_value=mock_db):
         update_data = {"name": "New Name", "phone": "123456"}
         response = client.put('/api/customer/some-id', json=update_data)
-        
+
         assert response.status_code == 200
         assert response.json['success'] is True
 
@@ -168,7 +168,7 @@ def test_update_customer_not_found(client):
     with patch('app.get_db', return_value=mock_db):
         update_data = {"name": "New Name"}
         response = client.put('/api/customer/some-id', json=update_data)
-        
+
         assert response.status_code == 404
         assert "Customer not found" in response.json['error']
 
@@ -179,7 +179,7 @@ def test_update_customer_bad_request(client):
     with patch('app.get_db', return_value=mock_db):
         # Send an empty JSON object
         response = client.put('/api/customer/some-id', json={})
-        
+
         assert response.status_code == 400
         assert "No update data provided" in response.json['error']
 
@@ -250,8 +250,8 @@ def test_capture_lead_500_error(client):
         
         response = client.post('/api/lead', json=lead_data)
         
-        assert response.status_code == 500
-        assert "Simulated lead database crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 # --- Tests for Epic 3.2: Convert lead to opportunity ---
 
 def test_convert_lead_success(client):
@@ -316,8 +316,8 @@ def test_convert_lead_500_error(client):
     with patch('app.get_db', side_effect=Exception("Simulated conversion crash")):
         response = client.post('/api/lead/any-id/convert')
         
-        assert response.status_code == 500
-        assert "Simulated conversion crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 # --- Tests for Epic 3.3: Assign lead to sales rep ---
 
 def test_assign_lead_success(client):
