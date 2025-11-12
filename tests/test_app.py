@@ -655,6 +655,46 @@ def test_add_points_on_purchase_upgrade_and_exception():
     assert result is None
 
 
+def test_convert_lead_db_failure(client):
+    """DB failure during convert results in 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.post('/api/lead/lead-1/convert')
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_assign_lead_db_failure(client):
+    """DB failure during assign returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.put('/api/lead/lead-1/assign', json={'rep_id': '123'})
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_update_opportunity_db_failure(client):
+    """DB failure during opportunity update returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.put('/api/opportunity/opp-1/status', json={'stage': 'Won'})
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_loyalty_profile_db_failure(client):
+    """DB failure while fetching loyalty profile returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.get('/api/loyalty/cust-1')
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_tickets_db_failure(client):
+    """DB failure when fetching tickets returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.get('/api/tickets')
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
 # --- NEW TESTS TO BOOST COVERAGE TO 75% ---
 
 def test_tier_upgrade_logic(client):
