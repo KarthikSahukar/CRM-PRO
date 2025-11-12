@@ -1,6 +1,6 @@
 import json
 import pytest
-from app import app, add_points_transaction
+from app import app, add_points_transaction, add_points_on_purchase
 from unittest.mock import MagicMock, patch
 from firebase_admin import firestore
 # Initialize Flask App
@@ -562,6 +562,97 @@ def test_referral_code_generation():
 
     code2 = generate_referral_code("")
     assert code2.startswith("CRM-")
+
+
+def test_redeem_points_missing_payload(client):
+    """Redeem endpoint returns 400 when payload missing."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/loyalty/cust-1/redeem', json={})
+    assert response.status_code == 400
+    assert "points_to_redeem" in response.json['error']
+
+
+def test_simulate_purchase_invalid_amount(client):
+    """Simulated purchase rejects non-numeric amount."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 'abc'})
+    assert response.status_code == 400
+    assert "must be a number" in response.json['error']
+
+
+def test_simulate_purchase_missing_customer(client):
+    """Simulated purchase requires customer_id."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/simulate-purchase', json={'amount': 10})
+    assert response.status_code == 400
+    assert "customer_id is required" in response.json['error']
+
+
+def test_use_referral_self_error(client):
+    """Referral endpoint blocks self-referral."""
+    mock_db = MagicMock()
+    loyalty_collection = MagicMock()
+    mock_db.collection.return_value = loyalty_collection
+
+    mock_doc = MagicMock()
+    mock_doc.id = 'cust-1'
+    loyalty_collection.where.return_value.limit.return_value.stream.return_value = [mock_doc]
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.post('/api/loyalty/cust-1/use-referral', json={'referral_code': 'CODE123'})
+
+    assert response.status_code == 400
+    assert "Cannot refer yourself" in response.json['error']
+
+
+def test_redeem_points_invalid_integer(client):
+    """Redeem points requires positive integer."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/loyalty/cust-1/redeem', json={'points_to_redeem': -10})
+    assert response.status_code == 400
+    assert "positive integer" in response.json['error']
+
+
+def test_simulate_purchase_negative_amount(client):
+    """Simulated purchase rejects non-positive amounts."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 0})
+    assert response.status_code == 400
+    assert "greater than zero" in response.get_json()['error']
+
+
+def test_simulate_purchase_database_failure(client):
+    """Simulated purchase propagates database failure as 503."""
+    with patch('app.get_db', side_effect=Exception("firestore down")):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 10})
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_use_referral_missing_code(client):
+    """Referral endpoint requires code in payload."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/loyalty/cust-2/use-referral', json={})
+    assert response.status_code == 400
+    assert "Referral code required" in response.get_json()['error']
+
+
+def test_add_points_on_purchase_upgrade_and_exception():
+    """Directly exercise add_points_on_purchase helper for coverage."""
+    mock_db = MagicMock()
+    mock_doc_ref = MagicMock()
+    mock_db.collection.return_value.document.return_value = mock_doc_ref
+
+    mock_transaction = MagicMock()
+    mock_db.transaction.return_value = mock_transaction
+
+    with patch('app.add_points_transaction', return_value={"new_points": 1200, "new_tier": "Silver"}):
+        result = add_points_on_purchase(mock_db, "cust-1", 100)
+    assert result['new_tier'] == "Silver"
+
+    with patch('app.add_points_transaction', side_effect=Exception("boom")):
+        result = add_points_on_purchase(mock_db, "cust-2", 50)
+    assert result is None
 
 
 # --- NEW TESTS TO BOOST COVERAGE TO 75% ---
