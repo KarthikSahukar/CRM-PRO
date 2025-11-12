@@ -1,4 +1,5 @@
 """Main Flask application for the CRM - Team Kryptonite."""
+# pylint: disable=no-member,broad-exception-caught,too-many-return-statements
 import logging
 import sys
 from datetime import datetime, timedelta, timezone
@@ -44,7 +45,7 @@ def _init_firestore_client():
         logger.error("FATAL ERROR: serviceAccountKey.json not found.")
         raise
     except Exception as e:
-        logger.error(f"Failed to initialize Firebase: {e}")
+        logger.error("Failed to initialize Firebase: %s", e)
         raise
 
 def get_db():
@@ -61,9 +62,9 @@ def get_db_or_raise():
     """
     try:
         db_conn = get_db()
-    except Exception:  # pragma: no cover - defensive logging
+    except Exception as exc:  # pragma: no cover - defensive logging
         logger.exception("Database access failure")
-        raise RuntimeError("Database connection failed")
+        raise RuntimeError("Database connection failed") from exc
 
     if db_conn is None:
         raise RuntimeError("Database connection failed")
@@ -78,18 +79,22 @@ def generate_referral_code(name=""):
 # --- HTML Rendering Routes ---
 @app.route('/')
 def dashboard():
+    """Render the dashboard page."""
     return render_template('index.html')
 
 @app.route('/login')
 def login_page():
+    """Render the login page."""
     return render_template('login.html')
 
 @app.route('/customers')
 def customers_page():
+    """Render the customers page."""
     return render_template('customers.html')
 
 @app.route('/tickets')
 def tickets_page():
+    """Render the tickets page."""
     return render_template('tickets.html')
 
 # --- API Routes (Epic 2: Customer CRUD) ---
@@ -144,7 +149,7 @@ def create_customer():
 
         return jsonify({"success": True, "id": customer_ref.id}), 201
 
-    except Exception as e:
+    except Exception:
         logger.exception("Create Customer Failed")
         return jsonify({"error": "Internal Server Error"}), 500
 
@@ -163,8 +168,8 @@ def get_customers():
             customer['id'] = doc.id
             customers.append(customer)
         return jsonify(customers), 200
-    except Exception as e:
-        logger.exception("Error fetching customers: %s", e)
+    except Exception:
+        logger.exception("Error fetching customers")
         return jsonify({"error": "Internal Server Error"}), 500
 
 # --- Additional Customer CRUD operations ---
@@ -183,8 +188,8 @@ def get_customer_details(customer_id):
         if not customer.exists:
             return jsonify({"error": "Customer not found"}), 404
         return jsonify(customer.to_dict() or {}), 200
-    except Exception as e:
-        logger.exception("Error getting customer details for %s: %s", customer_id, e)
+    except Exception:
+        logger.exception("Error getting customer details for %s", customer_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/api/customer/<string:customer_id>', methods=['PUT'])
@@ -197,7 +202,8 @@ def update_customer_details(customer_id):
             return jsonify({"error": str(err)}), 503
 
         data = request.get_json(silent=True) or {}
-        if not data or ('name' not in data and 'email' not in data and 'phone' not in data and 'company' not in data):
+        updatable_fields = ('name', 'email', 'phone', 'company')
+        if not data or not any(field in data for field in updatable_fields):
             return jsonify({"error": "No update data provided"}), 400
 
         customer_ref = db_conn.collection('customers').document(customer_id)
@@ -206,8 +212,8 @@ def update_customer_details(customer_id):
 
         customer_ref.set(data, merge=True)
         return jsonify({"success": True, "id": customer_id}), 200
-    except Exception as e:
-        logger.exception("Error updating customer %s: %s", customer_id, e)
+    except Exception:
+        logger.exception("Error updating customer %s", customer_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/api/customer/<string:customer_id>', methods=['DELETE'])
@@ -225,8 +231,8 @@ def delete_customer(customer_id):
 
         customer_ref.delete()
         return jsonify({"success": True, "id": customer_id}), 200
-    except Exception as e:
-        logger.exception("Error deleting customer %s: %s", customer_id, e)
+    except Exception:
+        logger.exception("Error deleting customer %s", customer_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 # --- API Routes (Epic 3: Leads & Opportunities) ---
@@ -253,7 +259,7 @@ def capture_lead():
         doc_ref = db_conn.collection('leads').document()
         doc_ref.set(lead_data)
         return jsonify({'success': True, 'id': doc_ref.id}), 201
-    except Exception as e:
+    except Exception:
         logger.exception("Capture Lead Failed")
         return jsonify({'success': False, 'error': 'Internal Server Error'}), 500
 
@@ -296,8 +302,8 @@ def convert_lead_to_opportunity(lead_id):
             "message": f"Lead {lead_id} converted to Opportunity.",
             "opportunity_id": opportunity_ref.id
         }), 200
-    except Exception as e:
-        logger.exception("Error converting lead %s: %s", lead_id, e)
+    except Exception:
+        logger.exception("Error converting lead %s", lead_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/api/lead/<string:lead_id>/assign', methods=['PUT'])
@@ -331,8 +337,8 @@ def assign_lead(lead_id):
             "success": True,
             "message": f"Lead {lead_id} assigned to {rep_name} ({rep_id})"
         }), 200
-    except Exception as e:
-        logger.exception("Error assigning lead %s: %s", lead_id, e)
+    except Exception:
+        logger.exception("Error assigning lead %s", lead_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/api/opportunity/<string:opportunity_id>/status', methods=['PUT'])
@@ -378,8 +384,8 @@ def update_opportunity_status(opportunity_id):
             "message": f"Opportunity {opportunity_id} status updated to {new_stage}"
         }), 200
 
-    except Exception as e:
-        logger.exception("Error updating opportunity %s: %s", opportunity_id, e)
+    except Exception:
+        logger.exception("Error updating opportunity %s", opportunity_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 # --- API Routes (Epic 4: Support Tickets - Kaveri) ---
@@ -428,7 +434,7 @@ def tickets_endpoint():
         ticket_ref = db_conn.collection('tickets').document()
         ticket_ref.set(ticket_data)
 
-        logger.info(f"Ticket created: {ticket_ref.id}")
+        logger.info("Ticket created: %s", ticket_ref.id)
 
         return jsonify({
             "success": True,
@@ -469,7 +475,7 @@ def get_loyalty_profile(customer_id):
         return jsonify(profile_doc.to_dict()), 200
 
     except Exception:
-        logger.exception(f"Error fetching loyalty profile for {customer_id}")
+        logger.exception("Error fetching loyalty profile for %s", customer_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 # --- TRANSACTIONAL HELPERS (For Epic 5 Safety) ---
@@ -548,7 +554,7 @@ def redeem_points(customer_id):
             return jsonify({"error": str(ve)}), 400
 
     except Exception:
-        logger.exception(f"Redeem error for {customer_id}")
+        logger.exception("Redeem error for %s", customer_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/api/loyalty/<string:customer_id>/use-referral', methods=['POST'])
@@ -569,7 +575,11 @@ def use_referral_code(customer_id):
             return jsonify({"error": "Referral code required"}), 400
 
         # Find the referrer
-        query = db_conn.collection('loyalty_profiles').where('referral_code', '==', code_used).limit(1)
+        query = (
+            db_conn.collection('loyalty_profiles')
+            .where('referral_code', '==', code_used)
+            .limit(1)
+        )
         referrers = list(query.stream())
 
         if not referrers:
