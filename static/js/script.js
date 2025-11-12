@@ -472,6 +472,26 @@ if (window.location.pathname === '/') {
             }
         });
     }
+    // --- SALES PAGE LOGIC (Sprint 2: Sales Dashboard) ---
+if (window.location.pathname === '/sales') {
+  const statTotalOpportunities = document.getElementById('stat-total-opportunities');
+  const statOpenOpportunities = document.getElementById('stat-open-opportunities');
+  const statWonOpportunities = document.getElementById('stat-won-opportunities');
+  const statTotalRevenue = document.getElementById('stat-total-revenue');
+
+  fetch('/api/sales-kpis')
+    .then(res => res.json())
+    .then(kpis => {
+      statTotalOpportunities.textContent = kpis.total_opportunities;
+      statOpenOpportunities.textContent = kpis.open_opportunities;
+      statWonOpportunities.textContent = kpis.won_opportunities;
+      statTotalRevenue.textContent = `$${kpis.total_revenue_won.toFixed(2)}`;
+    })
+    .catch(err => {
+      console.error('Error loading sales KPIs:', err);
+    });
+}
+
     // --- END TEAMMATE'S LOGIC ---
 
 

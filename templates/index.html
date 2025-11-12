@@ -1,25 +1,24 @@
-{% extends "layout.html" %}
-
-{% block title %}CRM Dashboard{% endblock %}
-
-{% block page_header %}Sales Performance Dashboard{% endblock %}
-
 {% block content %}
+<!-- Sales Performance Dashboard -->
 <div class="card">
-  <h3>Sales Performance Overview</h3>
+  <h3>Sales Performance Dashboard</h3>
+
   <div class="stat-grid">
     <div class="stat-card">
       <h3>Total Opportunities</h3>
       <p id="stat-total-opportunities">Loading...</p>
     </div>
+
     <div class="stat-card">
       <h3>Open Opportunities</h3>
       <p id="stat-open-opportunities">Loading...</p>
     </div>
+
     <div class="stat-card">
       <h3>Won Opportunities</h3>
       <p id="stat-won-opportunities">Loading...</p>
     </div>
+
     <div class="stat-card">
       <h3>Total Revenue Won</h3>
       <p id="stat-total-revenue">$0.00</p>
@@ -27,10 +26,12 @@
   </div>
 </div>
 
+<!-- Optional existing sections -->
 <div class="card">
-  <h3>Recent Updates</h3>
-  <ul id="recent-activity-list">
-    <li>Loading recent activities...</li>
-  </ul>
+  <h3>Quick Actions</h3>
+  <div class="actions">
+    <a href="/customers" class="btn btn-primary">Manage Customers</a>
+    <a href="/tickets" class="btn btn-secondary">Go to Tickets</a>
+  </div>
 </div>
 {% endblock %}

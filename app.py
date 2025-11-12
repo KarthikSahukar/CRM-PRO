@@ -728,6 +728,10 @@ def get_sales_kpis():
     except Exception:
         logger.exception("Error calculating sales KPIs")
         return jsonify({"error": "Internal Server Error"}), 500
+@app.route('/sales')
+def sales_page():
+    return render_template('sales.html')
+
 
 if __name__ == "__main__":
     app.run()
