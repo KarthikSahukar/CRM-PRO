@@ -187,7 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
         loadCustomers();
     }
     
-    // --- 4. DASHBOARD PAGE LOGIC ---
+    // --- 4. PAGE-SPECIFIC LOGIC ---
     if (window.location.pathname === '/') {
         const statTotalCustomers = document.getElementById('stat-total-customers');
         if (statTotalCustomers) {
@@ -201,6 +201,231 @@ document.addEventListener("DOMContentLoaded", () => {
                     statTotalCustomers.textContent = 'N/A';
                 });
         }
+    }
+
+    if (window.location.pathname === '/customers') {
+        const loyaltyOutput = document.getElementById('loyalty-output');
+        const showLoyaltyResult = (message, isError = false) => {
+            if (!loyaltyOutput) return;
+            loyaltyOutput.innerHTML = `<pre${isError ? ' class="error"' : ''}>${message}</pre>`;
+        };
+
+        const loyaltyProfileForm = document.getElementById('loyalty-profile-form');
+        if (loyaltyProfileForm) {
+            loyaltyProfileForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const customerId = document.getElementById('loyalty-profile-customer').value.trim();
+                if (!customerId) return;
+                try {
+                    const response = await fetch(`/api/loyalty/${encodeURIComponent(customerId)}`);
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to fetch profile');
+                    }
+                    const data = await response.json();
+                    showLoyaltyResult(JSON.stringify(data, null, 2));
+                } catch (err) {
+                    console.error('Loyalty profile fetch failed:', err);
+                    showLoyaltyResult(err.message, true);
+                }
+            });
+        }
+
+        const loyaltyPurchaseForm = document.getElementById('loyalty-purchase-form');
+        if (loyaltyPurchaseForm) {
+            loyaltyPurchaseForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const customerId = document.getElementById('purchase-customer').value.trim();
+                const amountValue = document.getElementById('purchase-amount').value;
+                if (!customerId || !amountValue) return;
+                try {
+                    const response = await fetch('/api/simulate-purchase', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            customer_id: customerId,
+                            amount: amountValue
+                        })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to simulate purchase');
+                    }
+                    showLoyaltyResult(JSON.stringify(data, null, 2));
+                } catch (err) {
+                    console.error('Simulate purchase failed:', err);
+                    showLoyaltyResult(err.message, true);
+                }
+            });
+        }
+
+        const loyaltyRedeemForm = document.getElementById('loyalty-redeem-form');
+        if (loyaltyRedeemForm) {
+            loyaltyRedeemForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const customerId = document.getElementById('redeem-customer').value.trim();
+                const points = document.getElementById('redeem-points').value;
+                if (!customerId || !points) return;
+                try {
+                    const response = await fetch(`/api/loyalty/${encodeURIComponent(customerId)}/redeem`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ points_to_redeem: Number(points) })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to redeem points');
+                    }
+                    showLoyaltyResult(JSON.stringify(data, null, 2));
+                } catch (err) {
+                    console.error('Redeem points failed:', err);
+                    showLoyaltyResult(err.message, true);
+                }
+            });
+        }
+
+        const loyaltyReferralForm = document.getElementById('loyalty-referral-form');
+        if (loyaltyReferralForm) {
+            loyaltyReferralForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const customerId = document.getElementById('referral-customer').value.trim();
+                const referralCode = document.getElementById('referral-code').value.trim();
+                if (!customerId || !referralCode) return;
+                try {
+                    const response = await fetch(`/api/loyalty/${encodeURIComponent(customerId)}/use-referral`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ referral_code: referralCode })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to apply referral');
+                    }
+                    showLoyaltyResult(JSON.stringify(data, null, 2));
+                } catch (err) {
+                    console.error('Apply referral failed:', err);
+                    showLoyaltyResult(err.message, true);
+                }
+            });
+        }
+    }
+
+    if (window.location.pathname === '/tickets') {
+        const ticketForm = document.getElementById('ticket-form');
+        const customerSelect = document.getElementById('ticket-customer-select');
+        const issueInput = document.getElementById('ticket-issue');
+        const prioritySelect = document.getElementById('ticket-priority');
+        const ticketStatus = document.getElementById('ticket-status');
+        const ticketList = document.getElementById('ticket-list');
+
+        const setTicketStatus = (message, isError = false) => {
+            if (!ticketStatus) return;
+            ticketStatus.innerHTML = '';
+            const span = document.createElement('span');
+            span.textContent = message;
+            span.style.color = isError ? 'red' : 'inherit';
+            ticketStatus.appendChild(span);
+        };
+
+        const populateCustomers = async () => {
+            if (!customerSelect) return;
+            customerSelect.innerHTML = '<option value="">Loading customers...</option>';
+            try {
+                const response = await fetch('/api/customers');
+                if (!response.ok) {
+                    throw new Error('Failed to load customers');
+                }
+                const customers = await response.json();
+                if (!customers.length) {
+                    customerSelect.innerHTML = '<option value="">No customers found</option>';
+                    return;
+                }
+                customerSelect.innerHTML = '<option value="">Select a customer</option>';
+                customers.forEach(customer => {
+                    const option = document.createElement('option');
+                    option.value = customer.id;
+                    option.textContent = customer.name || 'Unnamed';
+                    customerSelect.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Failed to populate customers:', err);
+                customerSelect.innerHTML = '<option value="">Error loading customers</option>';
+            }
+        };
+
+        const loadTickets = async () => {
+            if (!ticketList) return;
+            ticketList.innerHTML = '<li>Loading tickets...</li>';
+            try {
+                const response = await fetch('/api/tickets');
+                if (!response.ok) {
+                    throw new Error('Failed to load tickets');
+                }
+                const tickets = await response.json();
+                if (!tickets.length) {
+                    ticketList.innerHTML = '<li>No recent tickets found.</li>';
+                    return;
+                }
+                ticketList.innerHTML = '';
+                tickets.forEach(ticket => {
+                    const item = document.createElement('li');
+                    const issue = ticket.issue || 'No issue description';
+                    const customer = ticket.customer_id || 'Unknown customer';
+                    const priority = ticket.priority || 'Medium';
+                    const status = ticket.status || 'Open';
+                    item.textContent = `${issue} — Customer: ${customer} • Priority: ${priority} • Status: ${status}`;
+                    ticketList.appendChild(item);
+                });
+            } catch (err) {
+                console.error('Failed to load tickets:', err);
+                ticketList.innerHTML = '<li style="color: red;">Error loading tickets.</li>';
+            }
+        };
+
+        if (ticketForm) {
+            ticketForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const customerId = customerSelect.value;
+                const issue = issueInput.value.trim();
+                const priority = prioritySelect.value || 'Medium';
+
+                if (!customerId) {
+                    setTicketStatus('Please select a customer.', true);
+                    return;
+                }
+                if (!issue) {
+                    setTicketStatus('Issue description is required.', true);
+                    return;
+                }
+
+                setTicketStatus('Creating ticket...');
+                try {
+                    const response = await fetch('/api/tickets', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            customer_id: customerId,
+                            issue,
+                            priority
+                        })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to create ticket');
+                    }
+                    setTicketStatus(`Ticket created! ID: ${data.ticket_id}`);
+                    ticketForm.reset();
+                    prioritySelect.value = 'Medium';
+                    await loadTickets();
+                } catch (err) {
+                    console.error('Error creating ticket:', err);
+                    setTicketStatus(`Error creating ticket: ${err.message}`, true);
+                }
+            });
+        }
+
+        populateCustomers();
+        loadTickets();
     }
 
     // --- 5. LEAD FORM LOGIC (FROM TEAMMATE) ---

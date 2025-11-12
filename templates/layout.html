@@ -28,12 +28,12 @@
         <nav class="sidebar-nav">
             <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">Dashboard</a>
             <a href="/customers" class="nav-item {% if request.path == '/customers' %}active{% endif %}">Customers</a>
-            <a href="#" class="nav-item">Tickets</a>
+            <a href="/tickets" class="nav-item {% if request.path.startswith('/tickets') %}active{% endif %}">Tickets</a>
             <a href="#" class="nav-item">Sales</a>
         </nav>
         <div class="sidebar-footer">
             <a href="/login" class="nav-item">Logout</a>
-            <button id="theme-toggle">Toggle Theme</button>
+            <button id="theme-toggle" aria-label="Toggle theme">&#9790;</button>
         </div>
     </div>
 
