@@ -1,11 +1,27 @@
-# Ignore virtual environment
+# Virtual environments
 venv/
+.venv/
 
-# Ignore Python cache
+# macOS & editor junk
+.DS_Store
+.idea/
+.vscode/
+
+# Python cache / artifacts
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Ignore environment variables and logs
+# Build / packaging outputs
+dist/
+build/
+*.egg-info/
+
+# Environment variables and logs
 .env
 *.log
+.coverage
+
+# Sensitive Firebase key
 serviceAccountKey.json

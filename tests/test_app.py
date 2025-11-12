@@ -1,6 +1,6 @@
 import json
 import pytest
-from app import app
+from app import app, add_points_transaction, add_points_on_purchase
 from unittest.mock import MagicMock, patch
 from firebase_admin import firestore
 # Initialize Flask App
@@ -81,8 +81,8 @@ def test_create_customer_500_error(client):
         
         response = client.post('/api/customer', json=customer_data)
         
-        assert response.status_code == 500
-        assert "Simulated database crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 
 # Test 7: Test get_customers endpoint for 500 error
 def test_get_customers_500_error(client):
@@ -91,8 +91,8 @@ def test_get_customers_500_error(client):
         
         response = client.get('/api/customers')
         
-        assert response.status_code == 500
-        assert "Simulated database crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 
 # Test 8: Test get_db for FileNotFoundError
 def test_get_db_file_not_found_error(client):
@@ -103,8 +103,8 @@ def test_get_db_file_not_found_error(client):
         
         response = client.get('/api/customers')
         
-        # The app should now correctly return a 500 error
-        assert response.status_code == 500
+        # The app should now correctly return a 503 error
+        assert response.status_code == 503
         assert "Database connection failed" in response.json['error']
 
 # Add these new tests to the end of tests/test_app.py
@@ -153,7 +153,7 @@ def test_update_customer_success(client):
     with patch('app.get_db', return_value=mock_db):
         update_data = {"name": "New Name", "phone": "123456"}
         response = client.put('/api/customer/some-id', json=update_data)
-        
+
         assert response.status_code == 200
         assert response.json['success'] is True
 
@@ -168,7 +168,7 @@ def test_update_customer_not_found(client):
     with patch('app.get_db', return_value=mock_db):
         update_data = {"name": "New Name"}
         response = client.put('/api/customer/some-id', json=update_data)
-        
+
         assert response.status_code == 404
         assert "Customer not found" in response.json['error']
 
@@ -179,7 +179,7 @@ def test_update_customer_bad_request(client):
     with patch('app.get_db', return_value=mock_db):
         # Send an empty JSON object
         response = client.put('/api/customer/some-id', json={})
-        
+
         assert response.status_code == 400
         assert "No update data provided" in response.json['error']
 
@@ -250,8 +250,8 @@ def test_capture_lead_500_error(client):
         
         response = client.post('/api/lead', json=lead_data)
         
-        assert response.status_code == 500
-        assert "Simulated lead database crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 # --- Tests for Epic 3.2: Convert lead to opportunity ---
 
 def test_convert_lead_success(client):
@@ -316,8 +316,8 @@ def test_convert_lead_500_error(client):
     with patch('app.get_db', side_effect=Exception("Simulated conversion crash")):
         response = client.post('/api/lead/any-id/convert')
         
-        assert response.status_code == 500
-        assert "Simulated conversion crash" in response.json['error']
+        assert response.status_code == 503
+        assert "Database connection failed" in response.json['error']
 # --- Tests for Epic 3.3: Assign lead to sales rep ---
 
 def test_assign_lead_success(client):
@@ -431,3 +431,335 @@ def test_update_opportunity_status_not_found(client):
         
         assert response.status_code == 404
         assert 'Opportunity not found' in response.json['error']
+
+# --- Tests for Epic 4 & 5 helper endpoints ---
+
+def test_get_loyalty_profile_success(client):
+    """Loyalty profile retrieval returns profile data."""
+    mock_db = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {'points': 200, 'tier': 'Silver'}
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.get('/api/loyalty/customer-123')
+
+    assert response.status_code == 200
+    assert response.json['tier'] == 'Silver'
+
+
+def test_get_loyalty_profile_not_found(client):
+    """Loyalty profile retrieval returns 404 when missing."""
+    mock_db = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.exists = False
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.get('/api/loyalty/customer-unknown')
+
+    assert response.status_code == 404
+    assert "Loyalty profile not found" in response.json['error']
+
+
+def test_redeem_points_success(client):
+    """Redeeming points returns updated balance."""
+    mock_db = MagicMock()
+    mock_db.collection.return_value.document.return_value = MagicMock()
+    mock_db.transaction.return_value = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.redeem_transaction', return_value=80):
+        response = client.post('/api/loyalty/customer-123/redeem', json={'points_to_redeem': 20})
+
+    assert response.status_code == 200
+    assert response.json['new_points_balance'] == 80
+
+
+def test_redeem_points_insufficient(client):
+    """Redeeming with insufficient points surfaces 400."""
+    mock_db = MagicMock()
+    mock_db.collection.return_value.document.return_value = MagicMock()
+    mock_db.transaction.return_value = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.redeem_transaction', side_effect=ValueError("Insufficient points")):
+        response = client.post('/api/loyalty/customer-123/redeem', json={'points_to_redeem': 200})
+
+    assert response.status_code == 400
+    assert "Insufficient points" in response.json['error']
+
+
+def test_use_referral_success(client):
+    """Referral usage awards points to referrer."""
+    mock_db = MagicMock()
+    loyalty_collection = MagicMock()
+    mock_db.collection.return_value = loyalty_collection
+
+    referrer_doc = MagicMock()
+    referrer_doc.id = 'referrer-1'
+    loyalty_collection.where.return_value.limit.return_value.stream.return_value = [referrer_doc]
+
+    referrer_ref = MagicMock()
+    loyalty_collection.document.return_value = referrer_ref
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.post('/api/loyalty/new-user/use-referral', json={'referral_code': 'CODE123'})
+
+    assert response.status_code == 200
+    referrer_ref.update.assert_called_once_with({'points': firestore.Increment(100)})
+
+
+def test_use_referral_invalid_code(client):
+    """Invalid referral code returns 404."""
+    mock_db = MagicMock()
+    loyalty_collection = MagicMock()
+    mock_db.collection.return_value = loyalty_collection
+    loyalty_collection.where.return_value.limit.return_value.stream.return_value = []
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.post('/api/loyalty/new-user/use-referral', json={'referral_code': 'CODE123'})
+
+    assert response.status_code == 404
+    assert "Invalid referral code" in response.json['error']
+
+
+def test_simulate_purchase_success(client):
+    """Simulate purchase awards points and reports tier."""
+    mock_db = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.add_points_on_purchase', return_value={"new_points": 120, "new_tier": "Silver"}):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 50})
+
+    assert response.status_code == 200
+    assert response.json['new_points_balance'] == 120
+    assert response.json['new_tier'] == "Silver"
+
+
+def test_simulate_purchase_profile_missing(client):
+    """Simulated purchase returns 404 when loyalty profile is missing."""
+    mock_db = MagicMock()
+
+    with patch('app.get_db', return_value=mock_db), \
+         patch('app.add_points_on_purchase', return_value=None):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 10})
+
+    assert response.status_code == 404
+    assert "Loyalty profile not found" in response.json['error']
+
+
+def test_referral_code_generation():
+    """
+    Test the helper function directly to boost coverage.
+    """
+    from app import generate_referral_code
+
+    code1 = generate_referral_code("Kaveri Sharma")
+    assert code1.startswith("KAVER")
+    assert "-" in code1
+
+    code2 = generate_referral_code("")
+    assert code2.startswith("CRM-")
+
+
+def test_redeem_points_missing_payload(client):
+    """Redeem endpoint returns 400 when payload missing."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/loyalty/cust-1/redeem', json={})
+    assert response.status_code == 400
+    assert "points_to_redeem" in response.json['error']
+
+
+def test_simulate_purchase_invalid_amount(client):
+    """Simulated purchase rejects non-numeric amount."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 'abc'})
+    assert response.status_code == 400
+    assert "must be a number" in response.json['error']
+
+
+def test_simulate_purchase_missing_customer(client):
+    """Simulated purchase requires customer_id."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/simulate-purchase', json={'amount': 10})
+    assert response.status_code == 400
+    assert "customer_id is required" in response.json['error']
+
+
+def test_use_referral_self_error(client):
+    """Referral endpoint blocks self-referral."""
+    mock_db = MagicMock()
+    loyalty_collection = MagicMock()
+    mock_db.collection.return_value = loyalty_collection
+
+    mock_doc = MagicMock()
+    mock_doc.id = 'cust-1'
+    loyalty_collection.where.return_value.limit.return_value.stream.return_value = [mock_doc]
+
+    with patch('app.get_db', return_value=mock_db):
+        response = client.post('/api/loyalty/cust-1/use-referral', json={'referral_code': 'CODE123'})
+
+    assert response.status_code == 400
+    assert "Cannot refer yourself" in response.json['error']
+
+
+def test_redeem_points_invalid_integer(client):
+    """Redeem points requires positive integer."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/loyalty/cust-1/redeem', json={'points_to_redeem': -10})
+    assert response.status_code == 400
+    assert "positive integer" in response.json['error']
+
+
+def test_simulate_purchase_negative_amount(client):
+    """Simulated purchase rejects non-positive amounts."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 0})
+    assert response.status_code == 400
+    assert "greater than zero" in response.get_json()['error']
+
+
+def test_simulate_purchase_database_failure(client):
+    """Simulated purchase propagates database failure as 503."""
+    with patch('app.get_db', side_effect=Exception("firestore down")):
+        response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 10})
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_use_referral_missing_code(client):
+    """Referral endpoint requires code in payload."""
+    with patch('app.get_db', return_value=MagicMock()):
+        response = client.post('/api/loyalty/cust-2/use-referral', json={})
+    assert response.status_code == 400
+    assert "Referral code required" in response.get_json()['error']
+
+
+def test_add_points_on_purchase_upgrade_and_exception():
+    """Directly exercise add_points_on_purchase helper for coverage."""
+    mock_db = MagicMock()
+    mock_doc_ref = MagicMock()
+    mock_db.collection.return_value.document.return_value = mock_doc_ref
+
+    mock_transaction = MagicMock()
+    mock_db.transaction.return_value = mock_transaction
+
+    with patch('app.add_points_transaction', return_value={"new_points": 1200, "new_tier": "Silver"}):
+        result = add_points_on_purchase(mock_db, "cust-1", 100)
+    assert result['new_tier'] == "Silver"
+
+    with patch('app.add_points_transaction', side_effect=Exception("boom")):
+        result = add_points_on_purchase(mock_db, "cust-2", 50)
+    assert result is None
+
+
+def test_convert_lead_db_failure(client):
+    """DB failure during convert results in 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.post('/api/lead/lead-1/convert')
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_assign_lead_db_failure(client):
+    """DB failure during assign returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.put('/api/lead/lead-1/assign', json={'rep_id': '123'})
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_update_opportunity_db_failure(client):
+    """DB failure during opportunity update returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.put('/api/opportunity/opp-1/status', json={'stage': 'Won'})
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_loyalty_profile_db_failure(client):
+    """DB failure while fetching loyalty profile returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.get('/api/loyalty/cust-1')
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+def test_tickets_db_failure(client):
+    """DB failure when fetching tickets returns 503."""
+    with patch('app.get_db', side_effect=Exception("db down")):
+        response = client.get('/api/tickets')
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
+
+
+# --- NEW TESTS TO BOOST COVERAGE TO 75% ---
+
+def test_tier_upgrade_logic(client):
+    """
+    Test the specific branches for Silver and Gold upgrades.
+    Hits the 'elif' blocks in add_points_transaction.
+    """
+    from app import add_points_transaction
+
+    mock_transaction = MagicMock()
+    mock_ref = MagicMock()
+
+    mock_snapshot_silver = MagicMock()
+    mock_snapshot_silver.exists = True
+    mock_snapshot_silver.to_dict.return_value = {'points': 0, 'tier': 'Bronze'}
+    mock_ref.get.return_value = mock_snapshot_silver
+
+    add_points_transaction(mock_transaction, mock_ref, 600)
+    mock_transaction.update.assert_called_with(mock_ref, {'points': 600, 'tier': 'Silver'})
+
+    mock_snapshot_gold = MagicMock()
+    mock_snapshot_gold.exists = True
+    mock_snapshot_gold.to_dict.return_value = {'points': 1900, 'tier': 'Silver'}
+    mock_ref.get.return_value = mock_snapshot_gold
+
+    add_points_transaction(mock_transaction, mock_ref, 200)
+    mock_transaction.update.assert_called_with(mock_ref, {'points': 2100, 'tier': 'Gold'})
+
+
+def test_opportunity_closure_logic(client):
+    """
+    Ensure 'closedAt' timestamp is added for terminal stages.
+    FIXED: We verify the calls sequentially so we don't mix up arguments.
+    """
+    mock_db = MagicMock()
+    mock_opp = MagicMock()
+    mock_opp.exists = True
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_opp
+
+    with patch('app.get_db', return_value=mock_db):
+        client.put('/api/opportunity/opp-1/status', json={'stage': 'Won'})
+
+        update_mock = mock_db.collection.return_value.document.return_value.update
+        assert update_mock.called
+        args, kwargs = update_mock.call_args
+        data = args[0] if args else kwargs
+        assert data['stage'] == 'Won'
+        assert 'closedAt' in data
+
+        client.put('/api/opportunity/opp-1/status', json={'stage': 'Negotiation'})
+
+        args, kwargs = update_mock.call_args
+        data = args[0] if args else kwargs
+        assert data['stage'] == 'Negotiation'
+        assert 'closedAt' not in data
+
+
+def test_html_routes_rendering(client):
+    """
+    Cover the HTML render routes.
+    """
+    response_login = client.get('/login')
+    assert response_login.status_code == 200
+    assert b"CRM Login" in response_login.data
+
+    response_cust = client.get('/customers')
+    assert response_cust.status_code == 200
+
