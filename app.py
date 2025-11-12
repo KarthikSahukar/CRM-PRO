@@ -112,7 +112,7 @@ def create_customer():
 
         # Use a batch to ensure both documents are created, or neither is.
         batch = db_conn.batch()
-        
+
         # 1. Prepare Customer Doc
         customer_ref = db_conn.collection('customers').document()
         customer_data = {
@@ -135,7 +135,7 @@ def create_customer():
             'createdAt': firestore.SERVER_TIMESTAMP
         }
         batch.set(loyalty_ref, loyalty_data)
-        
+
         # 3. Commit the batch
         batch.commit()
 
@@ -239,7 +239,7 @@ def capture_lead():
         except RuntimeError as err:
             return jsonify({"error": str(err)}), 503
         data = request.get_json(silent=True)
-        
+
         if not data or not data.get('name') or not data.get('email') or not data.get('source'):
             return jsonify({'success': False, 'error': 'Name, email, and source are required'}), 400
 
@@ -479,11 +479,11 @@ def redeem_transaction(transaction, ref, points_to_redeem):
     snapshot = ref.get(transaction=transaction)
     if not snapshot.exists:
         raise ValueError("Profile not found")
-    
+
     current_points = snapshot.get('points')
     if current_points < points_to_redeem:
         raise ValueError("Insufficient points")
-    
+
     new_balance = current_points - points_to_redeem
     transaction.update(ref, {'points': new_balance})
     return new_balance
@@ -493,23 +493,23 @@ def add_points_transaction(transaction, ref, points_earned):
     snapshot = ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
-    
+
     data = snapshot.to_dict()
     current_points = data.get('points', 0)
     new_total = current_points + points_earned
-    
+
     updates = {'points': new_total}
-    
+
     # Calculate Tier
     new_tier = data.get('tier', 'Bronze')
     if new_total >= TIER_LEVELS["Gold"]:
         new_tier = "Gold"
     elif new_total >= TIER_LEVELS["Silver"]:
         new_tier = "Silver"
-        
+
     if new_tier != data.get('tier', 'Bronze'):
         updates['tier'] = new_tier
-        
+
     transaction.update(ref, updates)
     return {"new_points": new_total, "new_tier": new_tier}
 
@@ -535,7 +535,7 @@ def redeem_points(customer_id):
             return jsonify({"error": "Points must be a positive integer"}), 400
 
         loyalty_ref = db_conn.collection('loyalty_profiles').document(customer_id)
-        
+
         try:
             transaction = db_conn.transaction()
             new_balance = redeem_transaction(transaction, loyalty_ref, points)
@@ -546,7 +546,7 @@ def redeem_points(customer_id):
             }), 200
         except ValueError as ve:
             return jsonify({"error": str(ve)}), 400
-            
+
     except Exception:
         logger.exception(f"Redeem error for {customer_id}")
         return jsonify({"error": "Internal Server Error"}), 500
@@ -564,7 +564,7 @@ def use_referral_code(customer_id):
 
         data = request.get_json(silent=True)
         code_used = data.get('referral_code') if data else None
-        
+
         if not code_used:
             return jsonify({"error": "Referral code required"}), 400
 
@@ -605,10 +605,10 @@ def add_points_on_purchase(db_conn, customer_id, purchase_amount):
         loyalty_ref = db_conn.collection('loyalty_profiles').document(customer_id)
         transaction = db_conn.transaction()
         result = add_points_transaction(transaction, loyalty_ref, int(purchase_amount))
-        
+
         if result and result['new_tier'] != 'Bronze':
-             logger.info(f"Tier Check: {customer_id} is now {result['new_tier']}")
-             
+            logger.info("Tier Check: %s is now %s", customer_id, result['new_tier'])
+
         return result
     except Exception as e:
         logger.error(f"Error in add_points_on_purchase: {e}")

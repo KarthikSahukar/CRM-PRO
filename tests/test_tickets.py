@@ -54,3 +54,41 @@ def test_create_support_ticket_fail_no_data(client, mocker):
     assert response.status_code == 400
     data = response.get_json()
     assert "Missing required fields" in data['error']
+
+
+def test_get_tickets_success(client, mocker):
+    """
+    Test fetching recent tickets via the GET branch.
+    """
+    mock_db = mocker.MagicMock()
+
+    mock_ticket_doc = mocker.MagicMock()
+    mock_ticket_doc.id = "TICKET-1"
+    mock_ticket_doc.to_dict.return_value = {'status': 'Open', 'priority': 'High'}
+
+    mock_query = mocker.MagicMock()
+    mock_query.stream.return_value = [mock_ticket_doc]
+
+    mock_collection = mocker.MagicMock()
+    mock_collection.order_by.return_value.limit.return_value = mock_query
+    mock_db.collection.return_value = mock_collection
+
+    mocker.patch('app.get_db', return_value=mock_db)
+
+    response = client.get('/api/tickets')
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data[0]['id'] == "TICKET-1"
+    assert data[0]['status'] == 'Open'
+
+
+def test_create_support_ticket_invalid_body(client, mocker):
+    """
+    Posting without JSON should trigger the invalid body path.
+    """
+    mock_db = mocker.MagicMock()
+    mocker.patch('app.get_db', return_value=mock_db)
+
+    response = client.post('/api/tickets')
+    assert response.status_code == 400
+    assert "Invalid JSON body" in response.get_json()['error']
