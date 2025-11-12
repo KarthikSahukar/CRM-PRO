@@ -1,6 +1,6 @@
 import json
 import pytest
-from app import app
+from app import app, add_points_transaction
 from unittest.mock import MagicMock, patch
 from firebase_admin import firestore
 # Initialize Flask App
@@ -548,4 +548,87 @@ def test_simulate_purchase_profile_missing(client):
 
     assert response.status_code == 404
     assert "Loyalty profile not found" in response.json['error']
+
+
+def test_referral_code_generation():
+    """
+    Test the helper function directly to boost coverage.
+    """
+    from app import generate_referral_code
+
+    code1 = generate_referral_code("Kaveri Sharma")
+    assert code1.startswith("KAVER")
+    assert "-" in code1
+
+    code2 = generate_referral_code("")
+    assert code2.startswith("CRM-")
+
+
+# --- NEW TESTS TO BOOST COVERAGE TO 75% ---
+
+def test_tier_upgrade_logic(client):
+    """
+    Test the specific branches for Silver and Gold upgrades.
+    Hits the 'elif' blocks in add_points_transaction.
+    """
+    from app import add_points_transaction
+
+    mock_transaction = MagicMock()
+    mock_ref = MagicMock()
+
+    mock_snapshot_silver = MagicMock()
+    mock_snapshot_silver.exists = True
+    mock_snapshot_silver.to_dict.return_value = {'points': 0, 'tier': 'Bronze'}
+    mock_ref.get.return_value = mock_snapshot_silver
+
+    add_points_transaction(mock_transaction, mock_ref, 600)
+    mock_transaction.update.assert_called_with(mock_ref, {'points': 600, 'tier': 'Silver'})
+
+    mock_snapshot_gold = MagicMock()
+    mock_snapshot_gold.exists = True
+    mock_snapshot_gold.to_dict.return_value = {'points': 1900, 'tier': 'Silver'}
+    mock_ref.get.return_value = mock_snapshot_gold
+
+    add_points_transaction(mock_transaction, mock_ref, 200)
+    mock_transaction.update.assert_called_with(mock_ref, {'points': 2100, 'tier': 'Gold'})
+
+
+def test_opportunity_closure_logic(client):
+    """
+    Ensure 'closedAt' timestamp is added for terminal stages.
+    FIXED: We verify the calls sequentially so we don't mix up arguments.
+    """
+    mock_db = MagicMock()
+    mock_opp = MagicMock()
+    mock_opp.exists = True
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_opp
+
+    with patch('app.get_db', return_value=mock_db):
+        client.put('/api/opportunity/opp-1/status', json={'stage': 'Won'})
+
+        update_mock = mock_db.collection.return_value.document.return_value.update
+        assert update_mock.called
+        args, kwargs = update_mock.call_args
+        data = args[0] if args else kwargs
+        assert data['stage'] == 'Won'
+        assert 'closedAt' in data
+
+        client.put('/api/opportunity/opp-1/status', json={'stage': 'Negotiation'})
+
+        args, kwargs = update_mock.call_args
+        data = args[0] if args else kwargs
+        assert data['stage'] == 'Negotiation'
+        assert 'closedAt' not in data
+
+
+def test_html_routes_rendering(client):
+    """
+    Cover the HTML render routes.
+    """
+    response_login = client.get('/login')
+    assert response_login.status_code == 200
+    assert b"CRM Login" in response_login.data
+
+    response_cust = client.get('/customers')
+    assert response_cust.status_code == 200
 
