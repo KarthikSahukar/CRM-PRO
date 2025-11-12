@@ -188,36 +188,48 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     // --- 4. PAGE-SPECIFIC LOGIC ---
-    // --- 4. DASHBOARD LOGIC (Epic 6: Sales KPIs) ---
-if (window.location.pathname === '/') {
+    if (window.location.pathname === '/') {
+        const statTotalCustomers = document.getElementById('stat-total-customers');
+        if (statTotalCustomers) {
+            fetch('/api/customers')
+                .then(res => res.json())
+                .then(customers => {
+                    statTotalCustomers.textContent = customers.length;
+                })
+                .catch(err => {
+                    console.error('Error loading customer stat:', err);
+                    statTotalCustomers.textContent = 'N/A';
+                });
+        }
+        
+        // --- Fetch Sales KPIs (Epic 6, Story 1) ---
+        const statTotalOpportunities = document.getElementById('stat-total-opportunities');
+        const statWonOpportunities = document.getElementById('stat-won-opportunities');
+        const statTotalRevenue = document.getElementById('stat-total-revenue');
 
-    // Sales KPI elements
-    const statTotalOpportunities = document.getElementById('stat-total-opportunities');
-    const statOpenOpportunities = document.getElementById('stat-open-opportunities');
-    const statWonOpportunities = document.getElementById('stat-won-opportunities');
-    const statTotalRevenue = document.getElementById('stat-total-revenue');
-
-    // Fetch KPI data from backend
-    fetch('/api/sales-kpis')
-        .then(res => {
-            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-            return res.json();
-        })
-        .then(kpis => {
-            statTotalOpportunities.textContent = kpis.total_opportunities;
-            statOpenOpportunities.textContent = kpis.open_opportunities;
-            statWonOpportunities.textContent = kpis.won_opportunities;
-            statTotalRevenue.textContent = `$${kpis.total_revenue_won.toFixed(2)}`;
-        })
-        .catch(err => {
-            console.error('Error loading sales KPIs:', err);
-            statTotalOpportunities.textContent = 'Err';
-            statOpenOpportunities.textContent = 'Err';
-            statWonOpportunities.textContent = 'Err';
-            statTotalRevenue.textContent = 'Err';
-        });
-}
-
+        if (statTotalOpportunities) {
+            fetch('/api/sales-kpis')
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                    }
+                    return res.json();
+                })
+                .then(kpis => {
+                    statTotalOpportunities.textContent = kpis.total_opportunities;
+                    statWonOpportunities.textContent = kpis.won_opportunities;
+                    // Format revenue as currency
+                    statTotalRevenue.textContent = `$${kpis.total_revenue_won.toFixed(2)}`;
+                })
+                .catch(err => {
+                    console.error('Error loading sales KPIs:', err);
+                    if (statTotalOpportunities) statTotalOpportunities.textContent = 'Err';
+                    if (statWonOpportunities) statWonOpportunities.textContent = 'Err';
+                    if (statTotalRevenue) statTotalRevenue.textContent = 'Err';
+                });
+        }
+        // --- End Sales KPIs Logic ---
+    }
 
     if (window.location.pathname === '/customers') {
         const loyaltyOutput = document.getElementById('loyalty-output');
@@ -445,7 +457,7 @@ if (window.location.pathname === '/') {
     }
 
     // --- 5. LEAD FORM LOGIC (FROM TEAMMATE) ---
-    // We'll need to create a new page/modal for this form later
+    // The lead form is currently not rendered in the main UI, but the logic is here for completeness.
     const leadForm = document.getElementById("lead-form");
     if (leadForm) {
         leadForm.addEventListener("submit", async (e) => {
@@ -472,26 +484,6 @@ if (window.location.pathname === '/') {
             }
         });
     }
-    // --- SALES PAGE LOGIC (Sprint 2: Sales Dashboard) ---
-if (window.location.pathname === '/sales') {
-  const statTotalOpportunities = document.getElementById('stat-total-opportunities');
-  const statOpenOpportunities = document.getElementById('stat-open-opportunities');
-  const statWonOpportunities = document.getElementById('stat-won-opportunities');
-  const statTotalRevenue = document.getElementById('stat-total-revenue');
-
-  fetch('/api/sales-kpis')
-    .then(res => res.json())
-    .then(kpis => {
-      statTotalOpportunities.textContent = kpis.total_opportunities;
-      statOpenOpportunities.textContent = kpis.open_opportunities;
-      statWonOpportunities.textContent = kpis.won_opportunities;
-      statTotalRevenue.textContent = `$${kpis.total_revenue_won.toFixed(2)}`;
-    })
-    .catch(err => {
-      console.error('Error loading sales KPIs:', err);
-    });
-}
-
     // --- END TEAMMATE'S LOGIC ---
 
 

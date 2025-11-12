@@ -70,6 +70,9 @@ def test_login_route(client):
     response = client.get('/login')
     assert response.status_code == 200
     assert response.content_type == 'text/html; charset=utf-8'
+    # Fixed assertion to check for a unique element on login.html
+    assert b"<h2>CRM Login</h2>" in response.data 
+    assert b"Dashboard Overview" not in response.data
 
 # Test 6: Test create_customer endpoint for 500 error
 def test_create_customer_500_error(client):
@@ -577,7 +580,7 @@ def test_simulate_purchase_invalid_amount(client):
     with patch('app.get_db', return_value=MagicMock()):
         response = client.post('/api/simulate-purchase', json={'customer_id': 'cust-1', 'amount': 'abc'})
     assert response.status_code == 400
-    assert "must be a number" in response.json['error']
+    assert "amount must be a number" in response.json['error']
 
 
 def test_simulate_purchase_missing_customer(client):
@@ -758,13 +761,11 @@ def test_html_routes_rendering(client):
     """
     response_login = client.get('/login')
     assert response_login.status_code == 200
-    assert b"CRM Login" in response_login.data
+    assert b"<h2>CRM Login</h2>" in response_login.data
+    assert b"Dashboard Overview" not in response_login.data # Check dashboard content is NOT rendered
 
     response_cust = client.get('/customers')
     assert response_cust.status_code == 200
-# test_app.py (New Content)
-
-# ... (all existing tests)
 
 # --- NEW TESTS FOR EPIC 6: Dashboards & KPIs ---
 
@@ -814,4 +815,3 @@ def test_get_sales_kpis_database_failure(client, mocker):
     
     assert response.status_code == 503
     assert "Database connection failed" in response.get_json()['error']
-

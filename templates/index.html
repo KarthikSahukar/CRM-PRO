@@ -1,37 +1,39 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - CRM Pro{% endblock %}
+
+{% block page_header %}Dashboard Overview{% endblock %}
+
 {% block content %}
-<!-- Sales Performance Dashboard -->
-<div class="card">
-  <h3>Sales Performance Dashboard</h3>
-
-  <div class="stat-grid">
-    <div class="stat-card">
-      <h3>Total Opportunities</h3>
-      <p id="stat-total-opportunities">Loading...</p>
+    <div class="stat-grid">
+        <div class="card stat-card">
+            <h3>Total Customers</h3>
+            <p id="stat-total-customers">0</p>
+        </div>
+        <div class="card stat-card">
+            <h3>Open Tickets</h3>
+            <p id="stat-open-tickets">0</p>
+        </div>
+        <div classs="card stat-card">
+            <h3>New Leads (Example)</h3>
+            <p id="stat-new-leads">0</p>
+        </div>
     </div>
 
-    <div class="stat-card">
-      <h3>Open Opportunities</h3>
-      <p id="stat-open-opportunities">Loading...</p>
-    </div>
+    <div class="grid">
+        <section class="card">
+            <h3>Quick Actions</h3>
+            <div class="actions">
+                <a href="/customers" class="btn btn-primary">Manage Customers</a>
+                <a href="/tickets" class="btn btn-secondary">Go to Tickets</a>
+            </div>
+        </section>
 
-    <div class="stat-card">
-      <h3>Won Opportunities</h3>
-      <p id="stat-won-opportunities">Loading...</p>
+        <section class="card">
+            <h3>Recent Activity</h3>
+            <ul id="recent-activity-list">
+                <li>No recent activity.</li>
+            </ul>
+        </section>
     </div>
-
-    <div class="stat-card">
-      <h3>Total Revenue Won</h3>
-      <p id="stat-total-revenue">$0.00</p>
-    </div>
-  </div>
-</div>
-
-<!-- Optional existing sections -->
-<div class="card">
-  <h3>Quick Actions</h3>
-  <div class="actions">
-    <a href="/customers" class="btn btn-primary">Manage Customers</a>
-    <a href="/tickets" class="btn btn-secondary">Go to Tickets</a>
-  </div>
-</div>
 {% endblock %}

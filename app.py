@@ -28,31 +28,25 @@ app = Flask(__name__)
 @lru_cache(maxsize=1)
 def _init_firestore_client():
     """
-    Initializes the Firestore client safely and retries initialization if needed.
-    Prevents caching failed initialization states.
+    Internal function to initialize and cache the client only on success.
     """
     try:
-        # If already initialized
+        # Check if app is already initialized to avoid double-init errors
         return firestore.client()
-    except Exception:
-        logger.info("Firestore client not yet initialized. Attempting init...")
+    except ValueError:
+        pass # Not initialized yet
 
     try:
-        if not firebase_admin._apps:  # avoid reinitializing multiple times
-            cred = credentials.Certificate('serviceAccountKey.json')
-            firebase_admin.initialize_app(cred)
-            logger.info("Firebase Admin SDK initialized successfully.")
-
+        cred = credentials.Certificate('serviceAccountKey.json')
+        firebase_admin.initialize_app(cred)
+        logger.info("Firebase Admin SDK initialized successfully.")
         return firestore.client()
-
     except FileNotFoundError:
-        logger.error("serviceAccountKey.json missing — please check CI/CD secret or local file.")
-        return None
-
-    except Exception as e:
-        logger.exception("Firestore initialization failed.")
-        return None
-
+        logger.error("FATAL ERROR: serviceAccountKey.json not found.")
+        raise
+    except Exception:
+        logger.exception("Failed to initialize Firebase")
+        raise
 
 def get_db():
     """Public accessor for the DB client."""
@@ -684,8 +678,6 @@ def simulate_purchase():
 
 # --- API Routes (Epic 6: Dashboards & KPIs - Kavana) ---
 
-# --- API Routes (Epic 6: Dashboards & KPIs - Kavana) ---
-
 @app.route('/api/sales-kpis', methods=['GET'])
 def get_sales_kpis():
     """
@@ -730,6 +722,7 @@ def get_sales_kpis():
         return jsonify({"error": "Internal Server Error"}), 500
 @app.route('/sales')
 def sales_page():
+    """Render the sales performance dashboard."""
     return render_template('sales.html')
 
 
