@@ -762,4 +762,56 @@ def test_html_routes_rendering(client):
 
     response_cust = client.get('/customers')
     assert response_cust.status_code == 200
+# test_app.py (New Content)
+
+# ... (all existing tests)
+
+# --- NEW TESTS FOR EPIC 6: Dashboards & KPIs ---
+
+def test_get_sales_kpis_success(client, mocker):
+    """Test the get_sales_kpis function returns correct aggregation."""
+    mock_db = mocker.MagicMock()
+
+    # Create mock opportunities data
+    mock_opportunity_data = [
+        # Won, $100.00
+        mocker.MagicMock(to_dict=lambda: {'stage': 'Won', 'amount': 100.00}), 
+        # Lost, $50.00
+        mocker.MagicMock(to_dict=lambda: {'stage': 'Lost', 'amount': 50.00}), 
+        # Negotiation, $25.00 (Open)
+        mocker.MagicMock(to_dict=lambda: {'stage': 'Negotiation', 'amount': 25.00}), 
+        # Won, $15.50
+        mocker.MagicMock(to_dict=lambda: {'stage': 'Won', 'amount': 15.50}),
+        # Qualification, $0.00 (Open)
+        mocker.MagicMock(to_dict=lambda: {'stage': 'Qualification', 'amount': 0.00}),
+    ]
+
+    mock_db.collection.return_value.stream.return_value = mock_opportunity_data
+    mocker.patch('app.get_db', return_value=mock_db)
+
+    response = client.get('/api/sales-kpis')
+
+    assert response.status_code == 200
+    data = response.get_json()
+
+    # Expected calculations:
+    # Total Opps: 5
+    # Won Opps: 2
+    # Lost Opps: 1
+    # Open Opps: 5 - (2 + 1) = 2
+    # Total Revenue Won: 100.00 + 15.50 = 115.50
+
+    assert data['total_opportunities'] == 5
+    assert data['won_opportunities'] == 2
+    assert data['open_opportunities'] == 2
+    assert data['total_revenue_won'] == 115.50
+
+def test_get_sales_kpis_database_failure(client, mocker):
+    """Test the get_sales_kpis function returns 503 on database failure."""
+    mocker.patch('app.get_db', side_effect=Exception("DB connection failed"))
+    
+    response = client.get('/api/sales-kpis')
+    
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
 
