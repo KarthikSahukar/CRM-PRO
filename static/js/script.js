@@ -188,20 +188,36 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     // --- 4. PAGE-SPECIFIC LOGIC ---
-    if (window.location.pathname === '/') {
-        const statTotalCustomers = document.getElementById('stat-total-customers');
-        if (statTotalCustomers) {
-            fetch('/api/customers')
-                .then(res => res.json())
-                .then(customers => {
-                    statTotalCustomers.textContent = customers.length;
-                })
-                .catch(err => {
-                    console.error('Error loading customer stat:', err);
-                    statTotalCustomers.textContent = 'N/A';
-                });
-        }
-    }
+    // --- 4. DASHBOARD LOGIC (Epic 6: Sales KPIs) ---
+if (window.location.pathname === '/') {
+
+    // Sales KPI elements
+    const statTotalOpportunities = document.getElementById('stat-total-opportunities');
+    const statOpenOpportunities = document.getElementById('stat-open-opportunities');
+    const statWonOpportunities = document.getElementById('stat-won-opportunities');
+    const statTotalRevenue = document.getElementById('stat-total-revenue');
+
+    // Fetch KPI data from backend
+    fetch('/api/sales-kpis')
+        .then(res => {
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+            return res.json();
+        })
+        .then(kpis => {
+            statTotalOpportunities.textContent = kpis.total_opportunities;
+            statOpenOpportunities.textContent = kpis.open_opportunities;
+            statWonOpportunities.textContent = kpis.won_opportunities;
+            statTotalRevenue.textContent = `$${kpis.total_revenue_won.toFixed(2)}`;
+        })
+        .catch(err => {
+            console.error('Error loading sales KPIs:', err);
+            statTotalOpportunities.textContent = 'Err';
+            statOpenOpportunities.textContent = 'Err';
+            statWonOpportunities.textContent = 'Err';
+            statTotalRevenue.textContent = 'Err';
+        });
+}
+
 
     if (window.location.pathname === '/customers') {
         const loyaltyOutput = document.getElementById('loyalty-output');

@@ -28,25 +28,31 @@ app = Flask(__name__)
 @lru_cache(maxsize=1)
 def _init_firestore_client():
     """
-    Internal function to initialize and cache the client only on success.
+    Initializes the Firestore client safely and retries initialization if needed.
+    Prevents caching failed initialization states.
     """
     try:
-        # Check if app is already initialized to avoid double-init errors
+        # If already initialized
         return firestore.client()
-    except ValueError:
-        pass # Not initialized yet
+    except Exception:
+        logger.info("Firestore client not yet initialized. Attempting init...")
 
     try:
-        cred = credentials.Certificate('serviceAccountKey.json')
-        firebase_admin.initialize_app(cred)
-        logger.info("Firebase Admin SDK initialized successfully.")
+        if not firebase_admin._apps:  # avoid reinitializing multiple times
+            cred = credentials.Certificate('serviceAccountKey.json')
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDK initialized successfully.")
+
         return firestore.client()
+
     except FileNotFoundError:
-        logger.error("FATAL ERROR: serviceAccountKey.json not found.")
-        raise
-    except Exception:
-        logger.exception("Failed to initialize Firebase")
-        raise
+        logger.error("serviceAccountKey.json missing — please check CI/CD secret or local file.")
+        return None
+
+    except Exception as e:
+        logger.exception("Firestore initialization failed.")
+        return None
+
 
 def get_db():
     """Public accessor for the DB client."""
@@ -676,6 +682,10 @@ def simulate_purchase():
         return jsonify({"error": "Internal Server Error"}), 500
 
 
+# --- API Routes (Epic 6: Dashboards & KPIs - Kavana) ---
+
+# --- API Routes (Epic 6: Dashboards & KPIs - Kavana) ---
+
 @app.route('/api/sales-kpis', methods=['GET'])
 def get_sales_kpis():
     """
@@ -718,8 +728,6 @@ def get_sales_kpis():
     except Exception:
         logger.exception("Error calculating sales KPIs")
         return jsonify({"error": "Internal Server Error"}), 500
-
-
 
 if __name__ == "__main__":
     app.run()
