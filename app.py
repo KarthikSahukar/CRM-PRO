@@ -872,12 +872,7 @@ def get_ticket_metrics():
 
 # ... (Existing HTML Rendering Routes) ...
 
-@app.route('/sales')
-def sales_page():
-    """Render the sales performance dashboard."""
-    return render_template('sales.html')
 
-# --- NEW ROUTE FOR EPIC 6, STORY 4 (Export/Printable Report) ---
 @app.route('/report/kpis')
 def kpi_report_page():
     """
