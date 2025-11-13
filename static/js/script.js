@@ -76,6 +76,42 @@ async function fetchOpenTickets() {
         if (openTicketsElement) openTicketsElement.textContent = 'Error';
     }
 }
+// File: static/js/script.js
+
+// Add this function after fetchCustomerKPIs()
+async function fetchTicketMetrics() {
+    const avgResolutionElement = document.getElementById('stat-avg-resolution');
+    try {
+        const response = await fetch('/api/ticket-metrics');
+        if (!response.ok) throw new Error("Failed to fetch ticket metrics");
+        
+        const data = await response.json();
+        
+        if (avgResolutionElement) {
+            // Display the average resolution time rounded to one decimal place
+            avgResolutionElement.textContent = `${data.avg_resolution_hours.toFixed(1)} hrs`;
+        }
+        
+        // FUTURE STEP: Render the chart using data.total_resolved etc.
+        
+    } catch (error) {
+        console.error("Error loading Ticket Metrics:", error);
+        if (avgResolutionElement) avgResolutionElement.textContent = 'Err';
+    }
+}
+
+// Update the main Dashboard logic block:
+document.addEventListener('DOMContentLoaded', () => {
+    // ... (Theme toggle, mobile toggle, customer logic) ...
+
+    if (window.location.pathname === '/') {
+        // Run all dashboard KPI fetchers
+        fetchCustomerKPIs(); 
+        fetchTicketMetrics(); // <-- NEW FUNCTION CALL
+        // Placeholder for New Leads (stat-new-leads)
+    }
+    // ... (rest of the file)
+});
 
 // ====================================================
 // === EXISTING SCRIPT (FULLY PRESERVED AS IS) ========
