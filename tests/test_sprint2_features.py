@@ -271,3 +271,65 @@ def test_get_customer_kpis_database_failure(client, mocker):
     
     assert response.status_code == 503
     assert "Database connection failed" in response.get_json()['error']
+# File: tests/test_sprint2_features.py
+
+# Import necessary modules
+from datetime import datetime, timedelta
+
+# Add this test to the end of your file:
+def test_get_ticket_metrics_success(client, mocker):
+    """Test GET /api/ticket-metrics returns correct average resolution time."""
+    mock_db = mocker.MagicMock()
+
+    # Define times for two resolved tickets:
+    now = datetime.now()
+    
+    # Ticket 1: 5.5 hours resolution time (5.5 * 3600 seconds)
+    created_at_1 = now - timedelta(hours=5, minutes=30)
+    resolved_at_1 = now
+    
+    # Ticket 2: 10.5 hours resolution time
+    created_at_2 = now - timedelta(hours=10, minutes=30)
+    resolved_at_2 = now
+
+    mock_ticket_data = [
+        # Resolved ticket 1 (5.5 hours)
+        mocker.MagicMock(to_dict=lambda: {
+            'status': 'Closed', 
+            'created_at': created_at_1, 
+            'resolved_at': resolved_at_1
+        }), 
+        # Resolved ticket 2 (10.5 hours)
+        mocker.MagicMock(to_dict=lambda: {
+            'status': 'Closed', 
+            'created_at': created_at_2, 
+            'resolved_at': resolved_at_2
+        }),
+        # Open ticket (should be ignored)
+        mocker.MagicMock(to_dict=lambda: {
+            'status': 'Open', 
+            'created_at': now, 
+            'resolved_at': None
+        }),
+    ]
+
+    mock_db.collection.return_value.stream.return_value = mock_ticket_data
+    mocker.patch('app.get_db', return_value=mock_db)
+
+    response = client.get('/api/ticket-metrics')
+    
+    assert response.status_code == 200
+    data = response.get_json()
+
+    # Calculation: (5.5 + 10.5) / 2 = 16 / 2 = 8.0 hours
+    assert data['total_resolved'] == 2
+    assert data['avg_resolution_hours'] == 8.0 # Rounded to one decimal
+
+def test_get_ticket_metrics_database_failure(client, mocker):
+    """Test GET /api/ticket-metrics returns 503 on database failure."""
+    mocker.patch('app.get_db', side_effect=Exception("DB connection failed for tickets"))
+    
+    response = client.get('/api/ticket-metrics')
+    
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']

@@ -27,13 +27,13 @@ app = Flask(__name__)
 
 @lru_cache(maxsize=1)
 def _init_firestore_client():
-    """Initialize Firebase only once and return Firestore client."""
+    """Initialize Firebase only once and return Firestore client safely."""
     try:
-        # If Firebase is already initialized, just return the client
-        if firebase_admin._apps:
+        # If already initialized, return client
+        if len(firebase_admin._apps) > 0:
             return firestore.client()
 
-        # Otherwise initialize it
+        # Initialize Firebase app only once
         cred = credentials.Certificate('serviceAccountKey.json')
         firebase_admin.initialize_app(cred)
         logger.info("Firebase Admin SDK initialized successfully.")
@@ -43,9 +43,17 @@ def _init_firestore_client():
         logger.error("FATAL ERROR: serviceAccountKey.json not found.")
         raise
 
+    except ValueError as e:
+        # If initialization happened from another thread/process, reuse it
+        if "already exists" in str(e):
+            logger.warning("Firebase already initialized elsewhere. Reusing existing app.")
+            return firestore.client()
+        raise
+
     except Exception as e:
         logger.exception("Failed to initialize Firebase")
         raise e
+
 
 
 def get_db():
@@ -773,6 +781,99 @@ def get_customer_kpis():
 def sales_page():
     """Render the sales performance dashboard."""
     return render_template('sales.html')
+# File: app.py
+
+# Add this new route after the existing '/api/tickets' endpoint in the Epic 4 section.
+@app.route('/api/tickets/<string:ticket_id>/close', methods=['PUT'])
+def close_ticket(ticket_id):
+    """
+    Closes a support ticket, setting the 'status' to 'Closed' and recording the 'resolved_at' timestamp.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+            
+        ticket_ref = db_conn.collection('tickets').document(ticket_id)
+        ticket_doc = ticket_ref.get()
+
+        if not ticket_doc.exists:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        # Prevent closing a ticket that is already closed
+        if ticket_doc.to_dict().get('status') == 'Closed':
+            return jsonify({"error": "Ticket is already closed"}), 400
+
+        ticket_ref.update({
+            'status': 'Closed',
+            'resolved_at': firestore.SERVER_TIMESTAMP,
+            'updated_at': firestore.SERVER_TIMESTAMP
+        })
+
+        return jsonify({
+            "success": True, 
+            "message": f"Ticket {ticket_id} closed successfully.",
+            "status": "Closed"
+        }), 200
+
+    except Exception:
+        logger.exception("Error closing ticket %s", ticket_id)
+        return jsonify({"error": "Internal Server Error"}), 500
+# File: app.py
+
+# Add this new route after get_customer_kpis() in the Epic 6 section.
+@app.route('/api/ticket-metrics', methods=['GET'])
+def get_ticket_metrics():
+    """
+    Calculates metrics related to ticket resolution time, fulfilling Epic 6, Story 3.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        tickets_ref = db_conn.collection('tickets')
+        all_tickets = tickets_ref.stream()
+
+        total_resolved_count = 0
+        total_resolution_seconds = 0
+
+        for doc in all_tickets:
+            ticket = doc.to_dict()
+            
+            created_at = ticket.get('created_at')
+            resolved_at = ticket.get('resolved_at')
+
+            # Check if the ticket is resolved and has valid timestamps
+            if ticket.get('status') == 'Closed' and created_at and resolved_at:
+                # Convert timestamps to datetime objects if they aren't already (Firestore returns datetime)
+                
+                # Check if it's a Firestore Timestamp object and convert if necessary
+                if not isinstance(created_at, datetime):
+                    created_at = created_at.astimezone(timezone.utc)
+                if not isinstance(resolved_at, datetime):
+                    resolved_at = resolved_at.astimezone(timezone.utc)
+                
+                resolution_duration = resolved_at - created_at
+                
+                total_resolution_seconds += resolution_duration.total_seconds()
+                total_resolved_count += 1
+
+        avg_resolution_hours = 0
+        if total_resolved_count > 0:
+            avg_resolution_seconds = total_resolution_seconds / total_resolved_count
+            avg_resolution_hours = round(avg_resolution_seconds / 3600, 1) # Convert to hours, rounded to 1 decimal
+
+        return jsonify({
+            "total_resolved": total_resolved_count,
+            "avg_resolution_hours": avg_resolution_hours
+        }), 200
+
+    except Exception:
+        logger.exception("Error calculating ticket resolution metrics")
+        return jsonify({"error": "Internal Server Error"}), 500
 
 if __name__ == "__main__":
     app.run()
