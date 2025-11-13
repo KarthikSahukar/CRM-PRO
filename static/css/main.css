@@ -481,4 +481,9 @@ body, html {
     .grid {
         grid-template-columns: 1fr;
     }
+    
+}
+#resolution-chart {
+    height: 200px !important;   /* smaller graph */
+    max-height: 220px;
 }

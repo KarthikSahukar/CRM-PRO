@@ -783,50 +783,16 @@ def sales_page():
     return render_template('sales.html')
 # File: app.py
 
-# Add this new route after the existing '/api/tickets' endpoint in the Epic 4 section.
-@app.route('/api/tickets/<string:ticket_id>/close', methods=['PUT'])
-def close_ticket(ticket_id):
-    """
-    Closes a support ticket, setting the 'status' to 'Closed' and recording the 'resolved_at' timestamp.
-    """
-    try:
-        try:
-            db_conn = get_db_or_raise()
-        except RuntimeError as err:
-            return jsonify({"error": str(err)}), 503
-            
-        ticket_ref = db_conn.collection('tickets').document(ticket_id)
-        ticket_doc = ticket_ref.get()
+# ============================
+# DYNAMIC TICKET METRICS ROUTE
+# ============================
 
-        if not ticket_doc.exists:
-            return jsonify({"error": "Ticket not found"}), 404
-        
-        # Prevent closing a ticket that is already closed
-        if ticket_doc.to_dict().get('status') == 'Closed':
-            return jsonify({"error": "Ticket is already closed"}), 400
-
-        ticket_ref.update({
-            'status': 'Closed',
-            'resolved_at': firestore.SERVER_TIMESTAMP,
-            'updated_at': firestore.SERVER_TIMESTAMP
-        })
-
-        return jsonify({
-            "success": True, 
-            "message": f"Ticket {ticket_id} closed successfully.",
-            "status": "Closed"
-        }), 200
-
-    except Exception:
-        logger.exception("Error closing ticket %s", ticket_id)
-        return jsonify({"error": "Internal Server Error"}), 500
-# File: app.py
-
-# Add this new route after get_customer_kpis() in the Epic 6 section.
 @app.route('/api/ticket-metrics', methods=['GET'])
 def get_ticket_metrics():
     """
-    Calculates metrics related to ticket resolution time, fulfilling Epic 6, Story 3.
+    Calculates:
+    - average resolution time (hours)
+    - last 4-week resolution trend for chart
     """
     try:
         try:
@@ -840,40 +806,68 @@ def get_ticket_metrics():
         total_resolved_count = 0
         total_resolution_seconds = 0
 
+        # For weekly trend
+        today = datetime.utcnow()
+        weekly_buckets = {
+            "Week 1": [],
+            "Week 2": [],
+            "Week 3": [],
+            "Week 4": []
+        }
+
         for doc in all_tickets:
             ticket = doc.to_dict()
-            
+
             created_at = ticket.get('created_at')
             resolved_at = ticket.get('resolved_at')
 
-            # Check if the ticket is resolved and has valid timestamps
             if ticket.get('status') == 'Closed' and created_at and resolved_at:
-                # Convert timestamps to datetime objects if they aren't already (Firestore returns datetime)
-                
-                # Check if it's a Firestore Timestamp object and convert if necessary
+
+                # Convert to datetime
                 if not isinstance(created_at, datetime):
                     created_at = created_at.astimezone(timezone.utc)
                 if not isinstance(resolved_at, datetime):
                     resolved_at = resolved_at.astimezone(timezone.utc)
-                
+
                 resolution_duration = resolved_at - created_at
-                
+                hours = resolution_duration.total_seconds() / 3600
+
                 total_resolution_seconds += resolution_duration.total_seconds()
                 total_resolved_count += 1
 
-        avg_resolution_hours = 0
-        if total_resolved_count > 0:
-            avg_resolution_seconds = total_resolution_seconds / total_resolved_count
-            avg_resolution_hours = round(avg_resolution_seconds / 3600, 1) # Convert to hours, rounded to 1 decimal
+                # Assign to weekly bucket
+                for i in range(4):
+                    start = today - timedelta(days=(i + 1) * 7)
+                    end = today - timedelta(days=i * 7)
+
+                    if start <= resolved_at <= end:
+                        weekly_buckets[f"Week {4 - i}"].append(hours)
+
+        # AVG RESOLUTION HOURS
+        avg_resolution_hours = (
+            round((total_resolution_seconds / total_resolved_count) / 3600, 1)
+            if total_resolved_count > 0
+            else 0
+        )
+
+        # WEEKLY TREND ARRAY
+        trend_labels = list(weekly_buckets.keys())
+        trend_values = [
+            round(sum(bucket) / len(bucket), 2) if len(bucket) > 0 else 0
+            for bucket in weekly_buckets.values()
+        ]
 
         return jsonify({
             "total_resolved": total_resolved_count,
-            "avg_resolution_hours": avg_resolution_hours
+            "avg_resolution_hours": avg_resolution_hours,
+            "trend_labels": trend_labels,
+            "trend_values": trend_values
         }), 200
 
     except Exception:
         logger.exception("Error calculating ticket resolution metrics")
         return jsonify({"error": "Internal Server Error"}), 500
+
 
 if __name__ == "__main__":
     app.run()
