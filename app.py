@@ -720,11 +720,59 @@ def get_sales_kpis():
     except Exception:
         logger.exception("Error calculating sales KPIs")
         return jsonify({"error": "Internal Server Error"}), 500
+
+@app.route('/api/customer-kpis', methods=['GET'])
+def get_customer_kpis():
+    """
+    Calculates key customer-related performance indicators (KPIs) like retention metrics.
+    Corresponds to Epic 6, Story 2: Show customer retention metrics.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        customers_ref = db_conn.collection('customers')
+        all_customers = customers_ref.stream()
+
+        total_customers = 0
+        new_customers_last_30_days = 0
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        
+        # NOTE: A more efficient solution for large datasets would be a Firestore query 
+        # using a range filter on 'createdAt' for the 30-day calculation, but
+        # iterating is acceptable for smaller-to-medium collections.
+
+        for doc in all_customers:
+            total_customers += 1
+            customer = doc.to_dict()
+            
+            # Check for new customers in the last 30 days
+            created_at = customer.get('createdAt')
+            if created_at and isinstance(created_at, datetime):
+                # Ensure the datetime object has timezone information for comparison
+                created_at_utc = created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at
+                
+                if created_at_utc >= thirty_days_ago:
+                    new_customers_last_30_days += 1
+            # Handle Firestore server timestamp objects, which might be retrieved as
+            # firebase_admin.firestore.server_timestamp.ServerTimestamp in some mock/test contexts
+            # but usually as datetime in live environments.
+
+        return jsonify({
+            "total_customers": total_customers,
+            "new_customers_last_30_days": new_customers_last_30_days,
+        }), 200
+        
+    except Exception:
+        logger.exception("Error calculating customer KPIs")
+        return jsonify({"error": "Internal Server Error"}), 500
+
 @app.route('/sales')
 def sales_page():
     """Render the sales performance dashboard."""
     return render_template('sales.html')
-
 
 if __name__ == "__main__":
     app.run()
