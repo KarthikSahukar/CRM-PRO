@@ -881,6 +881,52 @@ def kpi_report_page():
     """
     return render_template('kpi_report.html')
 # --- END NEW ROUTE ---
+# Add this new route, for example, after the 'delete_customer' function
+
+# --- API Routes (Epic 8: GDPR/DPDP - Karthik) ---
+
+@app.route('/api/gdpr/export/<string:customer_id>', methods=['GET'])
+def export_customer_data(customer_id):
+    """
+    Simulates a GDPR/DPDP data export.
+    Finds all records related to a customer and returns them.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        # 1. Get the customer's main data
+        customer_ref = db_conn.collection('customers').document(customer_id)
+        customer_doc = customer_ref.get()
+        
+        if not customer_doc.exists:
+            return jsonify({"error": "Customer not found"}), 404
+        
+        export_data = {
+            "customer_details": customer_doc.to_dict()
+        }
+
+        # 2. Get the customer's tickets
+        tickets = []
+        ticket_query = db_conn.collection('tickets').where('customer_id', '==', customer_id).stream()
+        for doc in ticket_query:
+            tickets.append(doc.to_dict())
+        export_data["support_tickets"] = tickets
+
+        # 3. Get the customer's loyalty profile
+        loyalty_ref = db_conn.collection('loyalty_profiles').document(customer_id)
+        loyalty_doc = loyalty_ref.get()
+        if loyalty_doc.exists:
+            export_data["loyalty_profile"] = loyalty_doc.to_dict()
+
+        return jsonify(export_data), 200
+
+    except Exception:
+        logger.exception("Error exporting data for %s", customer_id)
+        return jsonify({"error": "Internal Server Error"}), 500
+    
 
 
 if __name__ == "__main__":
