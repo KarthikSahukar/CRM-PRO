@@ -868,6 +868,20 @@ def get_ticket_metrics():
         logger.exception("Error calculating ticket resolution metrics")
         return jsonify({"error": "Internal Server Error"}), 500
 
+# File: app.py
+
+# ... (Existing HTML Rendering Routes) ...
+
+
+@app.route('/report/kpis')
+def kpi_report_page():
+    """
+    Renders a dedicated, print-optimized page for exporting all KPIs as a PDF.
+    Fulfills Epic 6, Story 4: Export KPIs as PDF.
+    """
+    return render_template('kpi_report.html')
+# --- END NEW ROUTE ---
+
 
 if __name__ == "__main__":
     app.run()
