@@ -675,9 +675,56 @@ def simulate_purchase():
         logger.exception("Error simulating purchase")
         return jsonify({"error": "Internal Server Error"}), 500
 
+
+# --- API Routes (Epic 6: Dashboards & KPIs - Kavana) ---
+
+@app.route('/api/sales-kpis', methods=['GET'])
+def get_sales_kpis():
+    """
+    Calculates key sales performance indicators (KPIs) from opportunities.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        opportunities_ref = db_conn.collection('opportunities')
+        all_opportunities = opportunities_ref.stream()
+
+        total_opportunities = 0
+        total_won = 0
+        total_lost = 0
+        total_revenue_won = 0.0
+
+        for doc in all_opportunities:
+            opportunity = doc.to_dict()
+            total_opportunities += 1
+            amount = opportunity.get('amount', 0.0)
+
+            if opportunity.get('stage') == 'Won':
+                total_won += 1
+                total_revenue_won += amount
+            elif opportunity.get('stage') == 'Lost':
+                total_lost += 1
+        
+        open_opportunities = total_opportunities - (total_won + total_lost)
+
+        return jsonify({
+            "total_opportunities": total_opportunities,
+            "open_opportunities": open_opportunities,
+            "won_opportunities": total_won,
+            "total_revenue_won": round(total_revenue_won, 2)
+        }), 200
+        
+    except Exception:
+        logger.exception("Error calculating sales KPIs")
+        return jsonify({"error": "Internal Server Error"}), 500
+@app.route('/sales')
+def sales_page():
+    """Render the sales performance dashboard."""
+    return render_template('sales.html')
+
+
 if __name__ == "__main__":
-    # Allow overriding behaviour via environment variables; defaults are production safe.
-    port = int(os.environ.get("PORT", 5000))
-    debug_enabled = os.environ.get("FLASK_DEBUG", "0") == "1"
-    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
-    app.run(debug=debug_enabled, host=host, port=port)
+    app.run()

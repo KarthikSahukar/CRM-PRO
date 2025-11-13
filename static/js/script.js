@@ -201,6 +201,34 @@ document.addEventListener("DOMContentLoaded", () => {
                     statTotalCustomers.textContent = 'N/A';
                 });
         }
+        
+        // --- Fetch Sales KPIs (Epic 6, Story 1) ---
+        const statTotalOpportunities = document.getElementById('stat-total-opportunities');
+        const statWonOpportunities = document.getElementById('stat-won-opportunities');
+        const statTotalRevenue = document.getElementById('stat-total-revenue');
+
+        if (statTotalOpportunities) {
+            fetch('/api/sales-kpis')
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                    }
+                    return res.json();
+                })
+                .then(kpis => {
+                    statTotalOpportunities.textContent = kpis.total_opportunities;
+                    statWonOpportunities.textContent = kpis.won_opportunities;
+                    // Format revenue as currency
+                    statTotalRevenue.textContent = `$${kpis.total_revenue_won.toFixed(2)}`;
+                })
+                .catch(err => {
+                    console.error('Error loading sales KPIs:', err);
+                    if (statTotalOpportunities) statTotalOpportunities.textContent = 'Err';
+                    if (statWonOpportunities) statWonOpportunities.textContent = 'Err';
+                    if (statTotalRevenue) statTotalRevenue.textContent = 'Err';
+                });
+        }
+        // --- End Sales KPIs Logic ---
     }
 
     if (window.location.pathname === '/customers') {
@@ -429,7 +457,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- 5. LEAD FORM LOGIC (FROM TEAMMATE) ---
-    // We'll need to create a new page/modal for this form later
+    // The lead form is currently not rendered in the main UI, but the logic is here for completeness.
     const leadForm = document.getElementById("lead-form");
     if (leadForm) {
         leadForm.addEventListener("submit", async (e) => {
