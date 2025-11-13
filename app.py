@@ -27,13 +27,13 @@ app = Flask(__name__)
 
 @lru_cache(maxsize=1)
 def _init_firestore_client():
-    """Initialize Firebase only once and return Firestore client."""
+    """Initialize Firebase only once and return Firestore client safely."""
     try:
-        # If Firebase is already initialized, just return the client
-        if firebase_admin._apps:
+        # If already initialized, return client
+        if len(firebase_admin._apps) > 0:
             return firestore.client()
 
-        # Otherwise initialize it
+        # Initialize Firebase app only once
         cred = credentials.Certificate('serviceAccountKey.json')
         firebase_admin.initialize_app(cred)
         logger.info("Firebase Admin SDK initialized successfully.")
@@ -43,9 +43,17 @@ def _init_firestore_client():
         logger.error("FATAL ERROR: serviceAccountKey.json not found.")
         raise
 
+    except ValueError as e:
+        # If initialization happened from another thread/process, reuse it
+        if "already exists" in str(e):
+            logger.warning("Firebase already initialized elsewhere. Reusing existing app.")
+            return firestore.client()
+        raise
+
     except Exception as e:
         logger.exception("Failed to initialize Firebase")
         raise e
+
 
 
 def get_db():

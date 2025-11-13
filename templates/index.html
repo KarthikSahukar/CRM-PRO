@@ -1,6 +1,5 @@
 {% block content %}
 
-    <!-- Existing Stat Grid -->
     <div class="stat-grid">
         <div class="card stat-card">
             <h3>Total Customers</h3>
@@ -22,14 +21,11 @@
             <p id="stat-new-customers-30d">0</p>
         </div>
 
-        <!-- ⭐ NEW KPI CARD: No Breaking Change -->
         <div class="card stat-card">
             <h3>Avg. Resolution Time</h3>
             <p id="stat-avg-resolution">0.0 hrs</p>
         </div>
     </div>
-
-    <!-- Existing Sections -->
     <div class="grid">
         <section class="card">
             <h3>Quick Actions</h3>
@@ -45,14 +41,11 @@
                 <li>No recent activity.</li>
             </ul>
         </section>
-    </div>
-
-    <!-- ⭐ NEW CHART SECTION: Also Safe & Non-Interruptive -->
-    <div class="grid">
-        <section class="card" id="resolution-chart-card">
-            <h3>Resolution Time Trend</h3>
-            <canvas id="resolution-chart" width="400" height="200"></canvas>
-        </section>
-    </div>
+        
+        </div>
+    <section class="card" id="resolution-chart-card" style="margin-top: 25px;">
+        <h3>Resolution Time Trend</h3>
+        <canvas id="resolution-chart" width="400" height="200"></canvas>
+    </section>
 
 {% endblock %}
