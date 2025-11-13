@@ -217,3 +217,57 @@ def test_sales_page_route(client):
     response = client.get('/sales')
     assert response.status_code == 200
     assert response.content_type == 'text/html; charset=utf-8'
+# ... (existing tests)
+
+# --- Tests for Epic 6: Dashboards & KPIs (Kavana) ---
+
+# ... (Existing test_get_sales_kpis_success and test_get_sales_kpis_500_error)
+
+def test_get_customer_kpis_success(client, mocker):
+    """
+    Test GET /api/customer-kpis - success, checking for total and new customers.
+    Corresponds to Epic 6, Story 2: Show customer retention metrics.
+    """
+    mock_db = mocker.MagicMock()
+    
+    # Define a time 10 days ago (NEW customer) and 60 days ago (OLD customer)
+    from datetime import datetime, timedelta, timezone
+    
+    # NOTE: Firestore timestamp objects usually don't have an explicit timezone,
+    # so we mock them as naive datetime objects for simplicity in this test.
+    now = datetime.now()
+    ten_days_ago = now - timedelta(days=10)
+    sixty_days_ago = now - timedelta(days=60)
+    
+    # Create fake customer data
+    mock_cust1 = mocker.MagicMock(to_dict=lambda: {"name": "Old Customer", "createdAt": sixty_days_ago})
+    mock_cust2 = mocker.MagicMock(to_dict=lambda: {"name": "New Customer 1", "createdAt": ten_days_ago})
+    mock_cust3 = mocker.MagicMock(to_dict=lambda: {"name": "New Customer 2", "createdAt": ten_days_ago})
+    mock_cust4 = mocker.MagicMock(to_dict=lambda: {"name": "Another Old", "createdAt": sixty_days_ago})
+    
+    mock_customer_data = [mock_cust1, mock_cust2, mock_cust3, mock_cust4]
+    
+    # Mock the stream() call to return our fake data
+    mock_db.collection.return_value.stream.return_value = mock_customer_data
+    mocker.patch('app.get_db', return_value=mock_db)
+    
+    response = client.get('/api/customer-kpis')
+    
+    assert response.status_code == 200
+    data = response.get_json()
+    
+    # Expected calculations:
+    # Total Customers: 4
+    # New Customers (Last 30 Days): 2 (cust2, cust3)
+    
+    assert data['total_customers'] == 4
+    assert data['new_customers_last_30_days'] == 2
+
+def test_get_customer_kpis_database_failure(client, mocker):
+    """Test GET /api/customer-kpis returns 503 on database failure."""
+    mocker.patch('app.get_db', side_effect=Exception("DB connection failed for customers"))
+    
+    response = client.get('/api/customer-kpis')
+    
+    assert response.status_code == 503
+    assert "Database connection failed" in response.get_json()['error']
