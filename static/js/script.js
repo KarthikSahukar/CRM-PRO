@@ -110,103 +110,58 @@ async function fetchOpenTickets() {
 
 let _resolutionChartInstance = null;
 
-function renderResolutionChart(data) {
-    // data: { labels: [...], values: [...] }
+// Draw the Resolution Time Trend Chart (Dynamic)
+function renderResolutionChart(labels, values) {
     const canvas = document.getElementById('resolution-chart');
     if (!canvas) return;
 
-    // If a previous chart exists, destroy it cleanly
-    try {
-        if (_resolutionChartInstance && typeof _resolutionChartInstance.destroy === 'function') {
-            _resolutionChartInstance.destroy();
-            _resolutionChartInstance = null;
-        }
-    } catch (e) {
-        console.warn("Error destroying previous chart instance", e);
+    // Destroy previous chart (important when re-loading)
+    if (window.resolutionChart) {
+        window.resolutionChart.destroy();
     }
 
-    // Chart.js v4 uses Chart in the global namespace (chart.umd), available as window.Chart
-    const ctx = canvas.getContext('2d');
-    _resolutionChartInstance = new Chart(ctx, {
-        type: 'line',
+    const ctx = canvas.getContext("2d");
+
+    window.resolutionChart = new Chart(ctx, {
+        type: "line",
         data: {
-            labels: data.labels || [],
+            labels: labels,
             datasets: [{
-                label: 'Resolved Tickets (count)',
-                data: data.values || [],
-                borderWidth: 2,
-                pointRadius: 3,
-                tension: 0.25,
+                label: "Avg Resolution (hrs)",
+                data: values,
+                borderWidth: 3,
+                tension: 0.3,
                 fill: false
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    display: true,
-                    title: { display: false }
-                },
-                y: {
-                    display: true,
-                    beginAtZero: true,
-                    title: { display: false }
-                }
-            },
-            plugins: {
-                legend: { display: false }
-            }
+            maintainAspectRatio: false,   // <-- makes graph smaller
         }
     });
 }
 
+
 async function fetchTicketMetrics() {
     const avgResolutionElement = document.getElementById('stat-avg-resolution');
+
     try {
         const response = await fetch('/api/ticket-metrics');
-        if (!response.ok) throw new Error("Failed to fetch ticket metrics");
         const data = await response.json();
 
-        if (avgResolutionElement) {
-            // ensure numeric and format safely
-            const hours = typeof data.avg_resolution_hours === 'number' ? data.avg_resolution_hours : 0;
-            avgResolutionElement.textContent = `${hours.toFixed(1)} hrs`;
-        }
+        if (avgResolutionElement)
+            avgResolutionElement.textContent = `${data.avg_resolution_hours.toFixed(1)} hrs`;
 
-        // Build a simple series for the chart:
-        // If backend provides timeseries, prefer that. Otherwise use placeholder aggregated data.
-        // Expecting data may include fields like total_resolved; adapt gracefully.
-        const labels = [];
-        const values = [];
-        if (Array.isArray(data.timeseries) && data.timeseries.length) {
-            // backend-provided timeseries: [{label, value}, ...]
-            data.timeseries.forEach(pt => {
-                labels.push(pt.label ?? '');
-                values.push(pt.value ?? 0);
-            });
-        } else {
-            // fallback: create a small synthetic series (last 4 periods) with total_resolved as final datapoint
-            labels.push("Week 1", "Week 2", "Week 3", "Week 4");
-            const totalResolved = Number(data.total_resolved ?? 0);
-            // spread total across weeks in a non-zero way
-            const base = Math.max(1, Math.floor(totalResolved / 4));
-            values.push(base, base + 1, Math.max(0, base - 1), totalResolved);
-        }
-
-        // Ensure Chart.js is loaded, then render
-        await loadChartJsIfNeeded();
-        renderResolutionChart({ labels, values });
+        // Render dynamic chart
+        renderResolutionChart(data.trend_labels, data.trend_values);
 
     } catch (err) {
-        console.error("Error loading Ticket Metrics:", err);
+        console.error("Metrics error:", err);
         if (avgResolutionElement) avgResolutionElement.textContent = 'Err';
     }
 }
 
-/* =========================
-   Customers page logic
-   ========================= */
+  
 
 function initCustomersPage() {
     // Guard elements (some may not exist if not on page)
