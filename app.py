@@ -773,6 +773,45 @@ def get_customer_kpis():
 def sales_page():
     """Render the sales performance dashboard."""
     return render_template('sales.html')
+# File: app.py
+
+# Add this new route after the existing '/api/tickets' endpoint in the Epic 4 section.
+@app.route('/api/tickets/<string:ticket_id>/close', methods=['PUT'])
+def close_ticket(ticket_id):
+    """
+    Closes a support ticket, setting the 'status' to 'Closed' and recording the 'resolved_at' timestamp.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+            
+        ticket_ref = db_conn.collection('tickets').document(ticket_id)
+        ticket_doc = ticket_ref.get()
+
+        if not ticket_doc.exists:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        # Prevent closing a ticket that is already closed
+        if ticket_doc.to_dict().get('status') == 'Closed':
+            return jsonify({"error": "Ticket is already closed"}), 400
+
+        ticket_ref.update({
+            'status': 'Closed',
+            'resolved_at': firestore.SERVER_TIMESTAMP,
+            'updated_at': firestore.SERVER_TIMESTAMP
+        })
+
+        return jsonify({
+            "success": True, 
+            "message": f"Ticket {ticket_id} closed successfully.",
+            "status": "Closed"
+        }), 200
+
+    except Exception:
+        logger.exception("Error closing ticket %s", ticket_id)
+        return jsonify({"error": "Internal Server Error"}), 500
 
 if __name__ == "__main__":
     app.run()
