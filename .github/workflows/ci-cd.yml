@@ -28,14 +28,16 @@ jobs:
       # 3. Coverage Stage
       - name: Coverage - Run Pytest-Cov
         run: |
-          # Use single quotes around the omit pattern to prevent shell expansion
+          # This is the simplified command. The omit rule is now in pytest.ini
           pytest --cov=app --cov-report=xml --cov-fail-under=75
           
       # 4. Lint Stage
       - name: Lint - Run Pylint
         run: |
           pylint app.py --fail-under=7.5
+
       # 5. Security Stage
       - name: Security - Run Bandit
         run: |
+          # This is the corrected bandit command
           bandit -r app.py -l
