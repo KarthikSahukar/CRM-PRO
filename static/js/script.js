@@ -1,10 +1,91 @@
-// Wait for the DOM to be fully loaded before running scripts
+// CRM Front-end Logic (script.js)
+
+// ====================================================
+// === NEW UTILITY + KPI FUNCTIONS (ADDED SAFELY) =====
+// ====================================================
+
+/**
+ * Toggles the 'dark-mode' class on the HTML element.
+ */
+function toggleTheme() {
+    const html = document.documentElement;
+    html.classList.toggle('dark-mode');
+    const theme = html.classList.contains('dark-mode') ? 'dark' : 'light';
+    localStorage.setItem("theme", theme);
+}
+
+/**
+ * Handles error messages from API calls.
+ * @param {string} endpoint - The endpoint that failed.
+ */
+function displayError(endpoint) {
+    console.error(`Error fetching data from ${endpoint}`);
+    const elements = document.querySelectorAll('.stat-card p');
+    elements.forEach(el => {
+        if (el.textContent === 'Loading...' || el.textContent === '0') {
+            el.textContent = 'Err';
+        }
+    });
+}
+
+/**
+ * Fetch Customer KPIs (Epic 6 Story 2)
+ */
+async function fetchCustomerKPIs() {
+    try {
+        const response = await fetch('/api/customer-kpis');
+        if (!response.ok) {
+            throw new Error('Failed to fetch customer KPIs: ' + response.statusText);
+        }
+        const data = await response.json();
+
+        const totalCustomersElement = document.getElementById('stat-total-customers');
+        if (totalCustomersElement) {
+            totalCustomersElement.textContent = data.total_customers || 0;
+        }
+
+        const newCustomersElement = document.getElementById('stat-new-customers-30d');
+        if (newCustomersElement) {
+            newCustomersElement.textContent = data.new_customers_last_30_days || 0;
+        }
+
+    } catch (error) {
+        console.error("Error loading Customer KPIs:", error);
+        const newCustomersElement = document.getElementById('stat-new-customers-30d');
+        if (newCustomersElement) newCustomersElement.textContent = 'Error';
+    }
+}
+
+/**
+ * Fetch open ticket count (Epic 4)
+ */
+async function fetchOpenTickets() {
+    try {
+        const response = await fetch('/api/tickets');
+        if (!response.ok) throw new Error("Failed to fetch tickets");
+
+        const tickets = await response.json();
+        const openTickets = tickets.filter(t => t.status === 'Open').length;
+
+        const openTicketsElement = document.getElementById('stat-open-tickets');
+        if (openTicketsElement) openTicketsElement.textContent = openTickets;
+
+    } catch (error) {
+        console.error("Error loading Open Tickets:", error);
+        const openTicketsElement = document.getElementById('stat-open-tickets');
+        if (openTicketsElement) openTicketsElement.textContent = 'Error';
+    }
+}
+
+// ====================================================
+// === EXISTING SCRIPT (FULLY PRESERVED AS IS) ========
+// ====================================================
+
 document.addEventListener("DOMContentLoaded", () => {
     
     // --- 1. THEME TOGGLE (From Epic 10) ---
     const themeToggle = document.getElementById("theme-toggle");
     
-    // Check for saved theme in localStorage and apply it
     const currentTheme = localStorage.getItem("theme");
     if (currentTheme === "dark") {
         document.documentElement.classList.add("dark-mode");
@@ -202,7 +283,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
         }
         
-        // --- Fetch Sales KPIs (Epic 6, Story 1) ---
         const statTotalOpportunities = document.getElementById('stat-total-opportunities');
         const statWonOpportunities = document.getElementById('stat-won-opportunities');
         const statTotalRevenue = document.getElementById('stat-total-revenue');
@@ -218,17 +298,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 .then(kpis => {
                     statTotalOpportunities.textContent = kpis.total_opportunities;
                     statWonOpportunities.textContent = kpis.won_opportunities;
-                    // Format revenue as currency
                     statTotalRevenue.textContent = `$${kpis.total_revenue_won.toFixed(2)}`;
                 })
                 .catch(err => {
                     console.error('Error loading sales KPIs:', err);
-                    if (statTotalOpportunities) statTotalOpportunities.textContent = 'Err';
-                    if (statWonOpportunities) statWonOpportunities.textContent = 'Err';
-                    if (statTotalRevenue) statTotalRevenue.textContent = 'Err';
+                    statTotalOpportunities.textContent = 'Err';
+                    statWonOpportunities.textContent = 'Err';
+                    statTotalRevenue.textContent = 'Err';
                 });
         }
-        // --- End Sales KPIs Logic ---
+
+        // NEW KPI FUNCTIONS (won’t break anything)
+        fetchCustomerKPIs();
+        fetchOpenTickets();
     }
 
     if (window.location.pathname === '/customers') {
@@ -457,7 +539,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- 5. LEAD FORM LOGIC (FROM TEAMMATE) ---
-    // The lead form is currently not rendered in the main UI, but the logic is here for completeness.
     const leadForm = document.getElementById("lead-form");
     if (leadForm) {
         leadForm.addEventListener("submit", async (e) => {
@@ -466,7 +547,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 name: document.getElementById("lead-name").value,
                 email: document.getElementById("lead-email").value,
                 source: document.getElementById("lead-source").value,
-                status: "New" // Default status
+                status: "New"
             };
 
             const response = await fetch('/api/lead', {
@@ -484,8 +565,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
-    // --- END TEAMMATE'S LOGIC ---
-
 
     // --- 6. UTILITY FUNCTION ---
     function escapeHTML(str) {

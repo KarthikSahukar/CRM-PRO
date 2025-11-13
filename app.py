@@ -27,26 +27,26 @@ app = Flask(__name__)
 
 @lru_cache(maxsize=1)
 def _init_firestore_client():
-    """
-    Internal function to initialize and cache the client only on success.
-    """
+    """Initialize Firebase only once and return Firestore client."""
     try:
-        # Check if app is already initialized to avoid double-init errors
-        return firestore.client()
-    except ValueError:
-        pass # Not initialized yet
+        # If Firebase is already initialized, just return the client
+        if firebase_admin._apps:
+            return firestore.client()
 
-    try:
+        # Otherwise initialize it
         cred = credentials.Certificate('serviceAccountKey.json')
         firebase_admin.initialize_app(cred)
         logger.info("Firebase Admin SDK initialized successfully.")
         return firestore.client()
+
     except FileNotFoundError:
         logger.error("FATAL ERROR: serviceAccountKey.json not found.")
         raise
-    except Exception:
+
+    except Exception as e:
         logger.exception("Failed to initialize Firebase")
-        raise
+        raise e
+
 
 def get_db():
     """Public accessor for the DB client."""
