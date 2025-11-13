@@ -1,29 +1,35 @@
-{% extends "layout.html" %}
-
-{% block title %}Dashboard - CRM Pro{% endblock %}
-
-{% block page_header %}Dashboard Overview{% endblock %}
-
 {% block content %}
+
+    <!-- Existing Stat Grid -->
     <div class="stat-grid">
         <div class="card stat-card">
             <h3>Total Customers</h3>
             <p id="stat-total-customers">0</p>
         </div>
+
         <div class="card stat-card">
             <h3>Open Tickets</h3>
             <p id="stat-open-tickets">0</p>
         </div>
+
         <div class="card stat-card">
             <h3>New Leads (Example)</h3>
             <p id="stat-new-leads">0</p>
         </div>
+
         <div class="card stat-card">
             <h3>New Customers (30 Days)</h3>
             <p id="stat-new-customers-30d">0</p>
         </div>
-        </div>
 
+        <!-- ⭐ NEW KPI CARD: No Breaking Change -->
+        <div class="card stat-card">
+            <h3>Avg. Resolution Time</h3>
+            <p id="stat-avg-resolution">0.0 hrs</p>
+        </div>
+    </div>
+
+    <!-- Existing Sections -->
     <div class="grid">
         <section class="card">
             <h3>Quick Actions</h3>
@@ -40,4 +46,13 @@
             </ul>
         </section>
     </div>
+
+    <!-- ⭐ NEW CHART SECTION: Also Safe & Non-Interruptive -->
+    <div class="grid">
+        <section class="card" id="resolution-chart-card">
+            <h3>Resolution Time Trend</h3>
+            <canvas id="resolution-chart" width="400" height="200"></canvas>
+        </section>
+    </div>
+
 {% endblock %}
