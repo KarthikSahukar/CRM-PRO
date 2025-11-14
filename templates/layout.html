@@ -34,8 +34,10 @@
         <nav class="sidebar-nav">
             <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">Dashboard</a>
             <a href="/customers" class="nav-item {% if request.path == '/customers' %}active{% endif %}">Customers</a>
+            <a href="/leads" class="nav-item {% if request.path == '/leads' %}active{% endif %}">Leads</a>
             <a href="/tickets" class="nav-item {% if request.path.startswith('/tickets') %}active{% endif %}">Tickets</a>
             <a href="/sales" class="nav-item {% if request.path == '/sales' %}active{% endif %}">Sales</a>
+            <a href="/monitor" class="nav-item {% if request.path == '/monitor' %}active{% endif %}"> Monitor</a>
         </nav>
 
         <div class="sidebar-footer">

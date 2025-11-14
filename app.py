@@ -7,21 +7,53 @@ import secrets
 import string
 from functools import lru_cache
 import os
+import time  # Added for Epic 9 Monitoring
 
 import firebase_admin
 from firebase_admin import credentials, firestore
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, g  # Added 'g' for monitoring context
 
-# --- Logging Configuration ---
+# --- Logging Configuration (Updated for Epic 9 UI) ---
+# Create a file handler to store logs so the System Monitor page can read them
+file_handler = logging.FileHandler('crm_app.log')
+file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[
+        logging.StreamHandler(sys.stdout), # Print to terminal
+        file_handler                       # Save to file for UI
+    ]
 )
 logger = logging.getLogger(__name__)
 
 # Initialize Flask App
 app = Flask(__name__)
+
+# --- Middleware: Performance Monitoring (Epic 9) ---
+# This satisfies the "System performance" and "Monitoring" requirements
+@app.before_request
+def start_timer():
+    """Starts the timer before processing the request."""
+    g.start = time.time()
+
+@app.after_request
+def log_request(response):
+    """Calculates execution time and logs alerts if too slow (>1s)."""
+    if request.path.startswith('/static'):
+        return response
+    
+    now = time.time()
+    duration = round(now - g.start, 4)
+    
+    # Log every request (Audit Trail)
+    logger.info(f"Request: {request.method} {request.path} | Status: {response.status_code} | Time: {duration}s")
+
+    # Performance Alert: If request takes > 1.0s, log a warning
+    if duration > 1.0:
+        logger.warning(f"PERFORMANCE ALERT: Slow response on {request.path} ({duration}s)")
+    
+    return response
 
 # --- Firebase Initialization (Robust Pattern) ---
 
@@ -105,6 +137,11 @@ def customers_page():
 def tickets_page():
     """Render the tickets page."""
     return render_template('tickets.html')
+
+@app.route('/leads')
+def leads_page():
+    """Render the leads page."""
+    return render_template('leads.html')
 
 # --- API Routes (Epic 2: Customer CRUD) ---
 
@@ -245,6 +282,26 @@ def delete_customer(customer_id):
         return jsonify({"error": "Internal Server Error"}), 500
 
 # --- API Routes (Epic 3: Leads & Opportunities) ---
+
+@app.route('/api/leads', methods=['GET'])
+def get_leads():
+    """Gets all leads for display."""
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+        
+        leads = []
+        docs = db_conn.collection('leads').stream()
+        for doc in docs:
+            lead = doc.to_dict()
+            lead['id'] = doc.id
+            leads.append(lead)
+        return jsonify(leads), 200
+    except Exception:
+        logger.exception("Error fetching leads")
+        return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/api/lead', methods=['POST'])
 def capture_lead():
@@ -458,6 +515,86 @@ def tickets_endpoint():
         logger.exception("Error creating support ticket")
         return jsonify({"error": "Internal Server Error"}), 500
 
+@app.route('/api/ticket/<string:ticket_id>/close', methods=['PUT'])
+def close_ticket(ticket_id):
+    """
+    Closes a support ticket and records the resolution time.
+    Fulfills Epic 4 Story: Close and archive resolved tickets.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        ticket_ref = db_conn.collection('tickets').document(ticket_id)
+        ticket_doc = ticket_ref.get()
+
+        if not ticket_doc.exists:
+            return jsonify({"error": "Ticket not found"}), 404
+
+        # Atomic update to close
+        ticket_ref.update({
+            'status': 'Closed',
+            'resolved_at': firestore.SERVER_TIMESTAMP,
+            'updated_at': firestore.SERVER_TIMESTAMP
+        })
+
+        logger.info(f"Ticket {ticket_id} closed successfully.")
+        return jsonify({"success": True, "message": "Ticket closed"}), 200
+
+    except Exception:
+        logger.exception(f"Error closing ticket {ticket_id}")
+        return jsonify({"error": "Internal Server Error"}), 500
+
+@app.route('/api/tickets/check-sla', methods=['POST'])
+def check_sla_breaches():
+    """
+    Batch job to check for SLA breaches.
+    Fulfills Epic 4 Story: Escalate ticket if SLA is breached.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        
+        # Query: Status is Open AND sla_deadline < now
+        docs = (
+            db_conn.collection('tickets')
+            .where('status', '==', 'Open')
+            .where('sla_deadline', '<', now_iso)
+            .stream()
+        )
+
+        escalated_count = 0
+        batch = db_conn.batch()
+        
+        for doc in docs:
+            # escalate the ticket
+            ref = doc.reference
+            batch.update(ref, {
+                'status': 'Escalated',
+                'priority': 'High',
+                'escalated_at': firestore.SERVER_TIMESTAMP
+            })
+            escalated_count += 1
+
+        if escalated_count > 0:
+            batch.commit()
+            logger.warning(f"SLA MONITOR: Escalated {escalated_count} tickets due to SLA breach.")
+
+        return jsonify({
+            "success": True, 
+            "tickets_escalated": escalated_count,
+            "message": "SLA check complete"
+        }), 200
+
+    except Exception:
+        logger.exception("Error during SLA check")
+        return jsonify({"error": "Internal Server Error"}), 500
 
 # --- API Routes (Epic 5: Loyalty Program - Kaveri) ---
 
@@ -926,7 +1063,33 @@ def export_customer_data(customer_id):
     except Exception:
         logger.exception("Error exporting data for %s", customer_id)
         return jsonify({"error": "Internal Server Error"}), 500
-    
+
+# --- API Routes (Epic 9: System Monitor UI) ---
+
+@app.route('/monitor')
+def monitor_page():
+    """Renders the System Monitor / Audit Log page."""
+    return render_template('monitor.html')
+
+@app.route('/api/logs', methods=['GET'])
+def get_system_logs():
+    """
+    Reads the last 50 lines from the application log file.
+    Fulfills Epic 9: Log user activities in audit trail & Generate monitoring report.
+    """
+    try:
+        log_lines = []
+        if os.path.exists('crm_app.log'):
+            with open('crm_app.log', 'r') as f:
+                # Read all lines and keep the last 50
+                lines = f.readlines()
+                log_lines = lines[-50:]
+                # Reverse them so newest is at the top
+                log_lines.reverse()
+        return jsonify({"logs": log_lines}), 200
+    except Exception:
+        logger.exception("Error reading log file")
+        return jsonify({"logs": ["Error reading logs."]}), 500
 
 
 if __name__ == "__main__":
