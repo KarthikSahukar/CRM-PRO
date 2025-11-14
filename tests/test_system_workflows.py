@@ -56,3 +56,59 @@ def test_system_customer_to_ticket_workflow(client, mocker):
     assert response_ticket.status_code == 201
     assert response_ticket.json['ticket_id'] == "new-ticket-system-test"
     assert response_ticket.json['customer_id'] == new_customer_id
+
+# Add this new test to tests/test_system_workflows.py
+
+def test_system_lead_to_kpi_workflow(client, mocker):
+    """
+    Tests creating a lead, converting it, marking it as 'Won' (Epic 3),
+    and then verifying the Sales KPI dashboard (Epic 6) is updated.
+    """
+    mock_db = mocker.MagicMock()
+    mocker.patch('app.get_db', return_value=mock_db)
+    mocker.patch('app.get_db_or_raise', return_value=mock_db)
+
+    # --- Mocking Data ---
+    mock_lead_ref = mocker.MagicMock()
+    mock_lead_ref.id = "lead-123"
+    mock_lead_doc = mocker.MagicMock(exists=True)
+    mock_lead_doc.to_dict.return_value = {'name': 'Big Lead', 'email': 'lead@test.com', 'source': 'Web'}
+    mock_lead_ref.get.return_value = mock_lead_doc
+
+    mock_opp_ref = mocker.MagicMock()
+    mock_opp_ref.id = "opp-456"
+    mock_opp_doc = mocker.MagicMock(exists=True)
+    mock_opp_ref.get.return_value = mock_opp_doc
+
+    # Mock the various document() calls
+    def doc_side_effect(path=None):
+        if path == "lead-123":
+            return mock_lead_ref
+        if path == "opp-456":
+            return mock_opp_ref
+        return mocker.MagicMock(id="new-doc-id") # Default mock for new docs
+
+    mock_db.collection.return_value.document = doc_side_effect
+
+    # === STEP 1: Convert the Lead (from Epic 3) ===
+    response_convert = client.post('/api/lead/lead-123/convert')
+    assert response_convert.status_code == 200
+
+    # === STEP 2: Update Opportunity to 'Won' (from Epic 3) ===
+    update_data = {'stage': 'Won', 'amount': 5000}
+    response_update = client.put('/api/opportunity/opp-456/status', json=update_data)
+    assert response_update.status_code == 200
+
+    # --- Mocking for Step 3: Check Sales KPI ---
+    # Mock the stream() call for the KPI endpoint
+    mock_won_opp = mocker.MagicMock()
+    mock_won_opp.to_dict.return_value = {"stage": "Won", "amount": 5000}
+    mock_db.collection.return_value.stream.return_value = [mock_won_opp]
+
+    # === STEP 3: Check Sales KPI (from Epic 6) ===
+    response_kpi = client.get('/api/sales-kpis')
+
+    assert response_kpi.status_code == 200
+    assert response_kpi.json['total_opportunities'] == 1
+    assert response_kpi.json['won_opportunities'] == 1
+    assert response_kpi.json['total_revenue_won'] == 5000.0
