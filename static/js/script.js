@@ -824,7 +824,80 @@ if (assignLeadForm) {
     });
 }
 
+// script.js (Add Payment Logic)
 
+function initPaymentLogic() {
+    const paymentForm = document.getElementById('payment-form');
+    const paymentOutput = document.getElementById('payment-output');
+    const payMethodSelect = document.getElementById('pay-method');
+    const cardGroup = document.getElementById('card-group');
+    
+    if (!paymentForm) return; // Only run if the form exists
+
+    // Helper to display results
+    const showPaymentResult = (message, isError = false) => {
+        paymentOutput.innerHTML = `<pre${isError ? ' class="error"' : ''}>${message}</pre>`;
+    };
+    
+    // Toggle Card Number field visibility
+    payMethodSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'Card') {
+            cardGroup.style.display = 'block';
+        } else {
+            cardGroup.style.display = 'none';
+        }
+    });
+
+    // Handle form submission
+    paymentForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const method = payMethodSelect.value;
+        const payload = {
+            customer_id: document.getElementById('pay-customer').value.trim(),
+            amount: document.getElementById('pay-amount').value,
+            method: method,
+            card_number: (method === 'Card') ? document.getElementById('pay-card').value.trim() : null
+        };
+
+        try {
+            const response = await fetch('/api/payment/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                showPaymentResult(JSON.stringify(data, null, 2), false);
+            } else {
+                // Handle 400 failure status from mock gateway
+                const errorMessage = data.error || data.message || 'Payment failed due to an unknown error.';
+                showPaymentResult(`STATUS: Failed\nError: ${errorMessage}\nTXN ID: ${data.transaction_id || 'N/A'}`, true);
+            }
+        } catch (err) {
+            console.error('Payment processing failed:', err);
+            showPaymentResult(`SYSTEM ERROR: Could not reach payment server.`, true);
+        }
+    });
+}
+
+// Ensure initPaymentLogic is called on DOM load:
+// Find your main DOMContentLoaded handler and add the call:
+/*
+document.addEventListener("DOMContentLoaded", async () => {
+    // ... existing setup ...
+    
+    // Page-specific initializers
+    // ...
+    
+    // Always initialize payment logic if forms are present
+    initPaymentLogic(); // <--- ADD THIS LINE
+    
+    // ... rest of the code
+});
+*/
 /* =========================
    Main initialization
    ========================= */
