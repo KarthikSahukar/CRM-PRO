@@ -693,13 +693,12 @@ def redeem_points(customer_id):
             new_balance = redeem_transaction(transaction, loyalty_ref, points)
             return jsonify({
                 "success": True,
-                "message": "Redemption successful",
+            "message": "Redemption successful",
                 "new_points_balance": new_balance
-            }), 200
+        }), 200
         except ValueError as ve:
             return jsonify({"error": str(ve)}), 400
-
-    except Exception:
+    except Exception as e:
         logger.exception("Redeem error for %s", customer_id)
         return jsonify({"error": "Internal Server Error"}), 500
 
@@ -943,8 +942,8 @@ def get_ticket_metrics():
         total_resolved_count = 0
         total_resolution_seconds = 0
 
-        # For weekly trend
-        today = datetime.utcnow()
+        # For weekly trend - use timezone-aware 'now' to avoid naive vs aware comparisons
+        today = datetime.now(timezone.utc)
         weekly_buckets = {
             "Week 1": [],
             "Week 2": [],
@@ -960,11 +959,18 @@ def get_ticket_metrics():
 
             if ticket.get('status') == 'Closed' and created_at and resolved_at:
 
-                # Convert to datetime
-                if not isinstance(created_at, datetime):
-                    created_at = created_at.astimezone(timezone.utc)
-                if not isinstance(resolved_at, datetime):
-                    resolved_at = resolved_at.astimezone(timezone.utc)
+                # Normalize timestamps to timezone-aware UTC datetimes
+                def to_utc(dt):
+                    # Firestore timestamps or objects with astimezone()
+                    if not isinstance(dt, datetime):
+                        return dt.astimezone(timezone.utc)
+                    # Python datetime
+                    if dt.tzinfo is None:
+                        return dt.replace(tzinfo=timezone.utc)
+                    return dt.astimezone(timezone.utc)
+
+                created_at = to_utc(created_at)
+                resolved_at = to_utc(resolved_at)
 
                 resolution_duration = resolved_at - created_at
                 hours = resolution_duration.total_seconds() / 3600
