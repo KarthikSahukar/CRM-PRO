@@ -815,3 +815,64 @@ def test_get_sales_kpis_database_failure(client, mocker):
     
     assert response.status_code == 503
     assert "Database connection failed" in response.get_json()['error']
+
+
+# --- Additional test cases to increase coverage above 75% ---
+
+def test_generate_referral_code():
+    """Test the generate_referral_code function."""
+    from app import generate_referral_code
+    code = generate_referral_code("Alice")
+    assert code.startswith("ALICE-")
+    assert len(code.split("-")[1]) == 4
+
+
+def test_add_points_on_purchase_tier_upgrade(monkeypatch):
+    """Test add_points_on_purchase with tier upgrade."""
+    from app import add_points_on_purchase
+
+    class FakeRef:
+        pass
+
+    class FakeDB:
+        def collection(self, *_):
+            return self
+        def document(self, *_):
+            return FakeRef()
+        def transaction(self): 
+            return None
+
+    def fake_add_points_transaction(tx, ref, pts):
+        return {"new_points": 600, "new_tier": "Silver"}
+
+    monkeypatch.setattr("app.add_points_transaction", fake_add_points_transaction)
+
+    result = add_points_on_purchase(FakeDB(), "cust-1", 600)
+    assert result["new_tier"] == "Silver"
+
+
+def test_ticket_metrics_non_datetime(monkeypatch, client):
+    """Test ticket metrics with non-datetime timestamps."""
+    from app import app
+    from datetime import datetime, timezone
+
+    class FakeDoc:
+        def to_dict(self):
+            class FakeTS:
+                def astimezone(self, *_): 
+                    return datetime(2024, 1, 1, tzinfo=timezone.utc)
+            return {
+                "status": "Closed",
+                "created_at": FakeTS(),
+                "resolved_at": FakeTS(),
+            }
+
+    class FakeDB:
+        def collection(self, *_): 
+            return self
+        def stream(self): 
+            return [FakeDoc()]
+
+    monkeypatch.setattr("app.get_db_or_raise", lambda: FakeDB())
+    response = client.get("/api/ticket-metrics")
+    assert response.status_code == 200
