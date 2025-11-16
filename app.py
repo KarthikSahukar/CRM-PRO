@@ -469,12 +469,19 @@ def tickets_endpoint():
 
         if request.method == 'GET':
             tickets = []
-            ticket_query = (
-                db_conn.collection('tickets')
-                .order_by('created_at', direction=firestore.Query.DESCENDING)
-                .limit(20)
-            )
-            for doc in ticket_query.stream():
+            # keep ordering by created_at; ensure descending
+            try:
+                ticket_query = (
+                    db_conn.collection('tickets')
+                    .order_by('created_at', direction=firestore.Query.DESCENDING)
+                    .limit(20)
+                )
+                docs = ticket_query.stream()
+            except Exception:
+                # Fallback in case index is missing or ordering fails
+                docs = db_conn.collection('tickets').stream()
+
+            for doc in docs:
                 ticket = doc.to_dict()
                 ticket['id'] = doc.id
                 tickets.append(ticket)
@@ -515,27 +522,27 @@ def tickets_endpoint():
         logger.exception("Error creating support ticket")
         return jsonify({"error": "Internal Server Error"}), 500
 
+# --- FIXED: single, correct close route for tickets ---
 @app.route('/api/ticket/<string:ticket_id>/close', methods=['PUT'])
-# app.py
-
-@app.route('/api/ticket/<id>/close', methods=['PUT'])
-def close_ticket(id):
+def close_ticket(ticket_id):
     db = get_db()
     if db is None:
         return jsonify({"error": "Database connection failed"}), 503
 
     try:
-        ticket_ref = db.collection('tickets').document(id)
-        if not ticket_ref.get().exists:
+        ref = db.collection('tickets').document(ticket_id)
+        doc = ref.get()
+
+        if not doc.exists:
             return jsonify({"error": "Ticket not found"}), 404
 
         # Update the status and set the resolution timestamp
-        ticket_ref.update({
+        ref.update({
             'status': 'Closed',
             'closedAt': firestore.SERVER_TIMESTAMP
         })
         
-        return jsonify({"success": True, "message": f"Ticket {id} closed successfully"}), 200
+        return jsonify({"success": True, "message": f"Ticket {ticket_id} closed successfully"}), 200
     except Exception as e:
         print(f"Error closing ticket: {e}")
         return jsonify({"error": "Database connection failed"}), 503
@@ -917,31 +924,25 @@ def sales_page():
 # ============================
 
 @app.route('/api/ticket-metrics', methods=['GET'])
-# app.py (Replace the function that handles the /api/ticket-metrics route)
 
-# ... previous code ...
-
-# --- START OF EPIC 6.3 IMPLEMENTATION (REPLACEMENT) ---
-@app.route('/api/ticket-metrics', methods=['GET'])
 def get_ticket_metrics():
     """
     Calculates:
-    - average resolution time (hours)
-    - last 4-week resolution trend for chart
+      - Average resolution time (hours)
+      - 4-week resolution trend
     """
     try:
-        db_conn = get_db()
-        if db_conn is None:
+        db = get_db()
+        if db is None:
             return jsonify({"error": "Database connection failed"}), 503
 
-        tickets_ref = db_conn.collection('tickets')
-        all_tickets = tickets_ref.stream()
+        tickets = db.collection('tickets').stream()
 
-        total_resolved_count = 0
-        total_resolution_seconds = 0
+        total_resolved = 0
+        total_seconds = 0
 
-        # Use naive datetime for comparison consistency with converted Firestore timestamps
-        today = datetime.now()
+        today = datetime.now().replace(tzinfo=None)
+
         weekly_buckets = {
             "Week 1": [],
             "Week 2": [],
@@ -949,71 +950,86 @@ def get_ticket_metrics():
             "Week 4": []
         }
 
-        for doc in all_tickets:
+        def safe_convert(ts):
+            """Converts Firestore Timestamp or ISO string to naive datetime."""
+            if ts is None:
+                return None
+            # Firestore timestamp object (has to_datetime)
+            if hasattr(ts, "to_datetime"):
+                try:
+                    return ts.to_datetime().replace(tzinfo=None)
+                except Exception:
+                    return None
+            if isinstance(ts, datetime):
+                return ts.replace(tzinfo=None)
+            if isinstance(ts, str):
+                try:
+                    # Python's fromisoformat can parse many ISO formats, fallback simple parsing
+                    return datetime.fromisoformat(ts).replace(tzinfo=None)
+                except Exception:
+                    # Last resort: attempt a common format
+                    try:
+                        return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f%z").replace(tzinfo=None)
+                    except Exception:
+                        return None
+            return None
+
+        for doc in tickets:
             ticket = doc.to_dict()
 
-            created_at_ts = ticket.get('createdAt')
-            closed_at_ts = ticket.get('closedAt')
+            # Firestore fields
+            created_at_ts = ticket.get("created_at")
+            closed_at_ts = ticket.get("closedAt")
 
-            # Ensure ticket is closed and timestamps exist
-            if ticket.get('status') == 'Closed' and created_at_ts and closed_at_ts:
-                
-                # --- FIX: Safe conversion of Firestore Timestamp to naive Python datetime ---
-                try:
-                    # Convert Firestore Timestamp to Python datetime, removing timezone info for naive comparison
-                    created_at = created_at_ts.replace(tzinfo=None)
-                    resolved_at = closed_at_ts.replace(tzinfo=None)
-                except AttributeError:
-                    # Skip if the object is not a Timestamp (e.g., corrupted data or missing field)
-                    print("Skipping ticket due to invalid timestamp format.")
-                    continue
-                # --- END FIX ---
+            # Only closed tickets count
+            if ticket.get("status") != "Closed":
+                continue
 
+            created_at = safe_convert(created_at_ts)
+            resolved_at = safe_convert(closed_at_ts)
 
-                resolution_duration = resolved_at - created_at
-                hours = resolution_duration.total_seconds() / 3600
+            if not created_at or not resolved_at:
+                continue
 
-                total_resolution_seconds += resolution_duration.total_seconds()
-                total_resolved_count += 1
+            # Calculate resolution time
+            seconds = (resolved_at - created_at).total_seconds()
+            hours = seconds / 3600
 
-                # Assign to weekly bucket 
-                for i in range(4): # i = 0 (current week) to 3 (4 weeks ago)
-                    start = today - timedelta(days=(i + 1) * 7)
-                    end = today - timedelta(days=i * 7)
-                    
-                    # Check if the resolution date falls within the range
-                    if start <= resolved_at < end:
-                        # Use a reverse index for labeling (i=0 is Week 4, i=3 is Week 1)
-                        weekly_buckets[f"Week {4 - i}"].append(hours)
-                        break 
+            total_resolved += 1
+            total_seconds += seconds
 
-        # AVG RESOLUTION HOURS
-        avg_resolution_hours = (
-            round((total_resolution_seconds / total_resolved_count) / 3600, 1)
-            if total_resolved_count > 0
-            else 0
-        )
+            # Bucket assignment for last 4 weeks
+            for i in range(4):
+                start = today - timedelta(days=(i + 1) * 7)
+                end = today - timedelta(days=i * 7)
 
-        # WEEKLY TREND ARRAY
+                if start <= resolved_at < end:
+                    weekly_buckets[f"Week {4 - i}"].append(hours)
+                    break
+
+        # Final averages
+        avg_hours = round((total_seconds / total_resolved) / 3600, 1) if total_resolved else 0
+
         trend_labels = list(weekly_buckets.keys())
         trend_values = [
-            round(sum(bucket) / len(bucket), 2) if len(bucket) > 0 else 0
-            for bucket in weekly_buckets.values()
+            round(sum(values) / len(values), 2) if values else 0
+            for values in weekly_buckets.values()
         ]
 
         return jsonify({
-            "total_resolved": total_resolved_count,
-            "avg_resolution_hours": avg_resolution_hours,
+            "total_resolved": total_resolved,
+            "avg_resolution_hours": avg_hours,
             "trend_labels": trend_labels,
             "trend_values": trend_values
         }), 200
 
     except Exception as e:
-        print(f"Error calculating ticket resolution metrics: {e}")
+        print("Error calculating ticket metrics:", e)
         return jsonify({"error": "Database connection failed"}), 503
 
+
 @app.route('/api/lead-kpis', methods=['GET'])
-@app.route('/api/lead-kpis', methods=['GET'])
+
 def get_lead_kpis():
     db = get_db()
     if db is None:
