@@ -87,6 +87,26 @@ async function fetchCustomerKPIs() {
         if (newCustomersElement) newCustomersElement.textContent = 'Error';
     }
 }
+// script.js (Add this to the KPI Fetchers section)
+
+
+async function fetchLeadKPIs() {
+    try {
+        const response = await fetch('/api/lead-kpis');
+        if (!response.ok) throw new Error('Failed to fetch lead KPIs');
+
+        const data = await response.json();
+        const newLeadsElement = document.getElementById('stat-new-leads');
+        if (newLeadsElement) {
+            newLeadsElement.textContent = data.new_leads_count ?? 0;
+        }
+    } catch (err) {
+        console.error("Error loading Lead KPIs:", err);
+        const newLeadsElement = document.getElementById('stat-new-leads');
+        if (newLeadsElement) newLeadsElement.textContent = 'Error';
+    }
+}
+
 
 async function fetchOpenTickets() {
     try {
@@ -147,20 +167,38 @@ async function fetchTicketMetrics() {
 
     try {
         const response = await fetch('/api/ticket-metrics');
+        
+        // CORRECTION 1: Check HTTP status explicitly
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
 
-        if (avgResolutionElement)
+        // Check if the element exists before trying to update
+        if (avgResolutionElement) {
             avgResolutionElement.textContent = `${data.avg_resolution_hours.toFixed(1)} hrs`;
-
-        // Render dynamic chart
-        renderResolutionChart(data.trend_labels, data.trend_values);
+        }
+        
+        // CORRECTION 2: Check if Chart.js is loaded globally before attempting render
+        if (window.Chart) {
+            // Render dynamic chart
+            renderResolutionChart(data.trend_labels, data.trend_values);
+        } else {
+             // This warning helps debug issues with the loadChartJsIfNeeded promise chain
+             console.warn("Chart.js not yet loaded. Skipping chart render in fetchTicketMetrics.");
+        }
 
     } catch (err) {
         console.error("Metrics error:", err);
-        if (avgResolutionElement) avgResolutionElement.textContent = 'Err';
+        // Ensure error is displayed if the API call fails
+        if (avgResolutionElement) avgResolutionElement.textContent = 'Err'; 
+        
+        // Optionally, alert the user or show a status message if the failure is critical
+        // alert(`Failed to load ticket metrics: ${err.message}`);
     }
 }
-
   
 
 function initCustomersPage() {
@@ -315,7 +353,83 @@ function initCustomersPage() {
 /* =========================
    Tickets page logic
    ========================= */
+// script.js (Add this function)
 
+// script.js (Add this function)
+const loadTickets = async () => {
+    const ticketList = document.getElementById('ticket-list'); // Ensure this element is retrieved if not passed/global
+    if (!ticketList) return; // Safety check
+
+    ticketList.innerHTML = '<li>Loading tickets...</li>';
+    try {
+        const r = await fetch('/api/tickets');
+        if (!r.ok) throw new Error('Failed to load tickets');
+        const tickets = await r.json();
+        
+        if (!Array.isArray(tickets) || tickets.length === 0) {
+            ticketList.innerHTML = '<li>No recent tickets found.</li>';
+            return;
+        }
+        
+        ticketList.innerHTML = '';
+        tickets.forEach(ticket => {
+            // Use innerHTML for richer content, including the button
+            const item = document.createElement('li');
+            const issue = escapeHTML(ticket.issue || 'No issue description');
+            const customer = escapeHTML(ticket.customer_id || 'Unknown customer');
+            const priority = escapeHTML(ticket.priority || 'Medium');
+            const status = escapeHTML(ticket.status || 'Open');
+            
+            // Generate action button HTML
+            let actions = '';
+            if (status === 'Open') {
+                actions = `
+                    <button class="btn btn-sm btn-danger" 
+                            style="margin-left: 10px; padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; box-shadow: 0 1px 3px rgba(222, 53, 11, 0.4);"
+                            onclick="closeTicket('${ticket.id}')">
+                        Close Ticket
+                    </button>`;
+            } else if (status === 'Closed') {
+                 actions = '<span style="color: #4CAF50; font-weight: 600; margin-left: 10px;">✓ Resolved</span>';
+            }
+
+            // Set the list item content
+            item.innerHTML = `
+                <strong>${issue}</strong> 
+                — Customer: ${customer} • Priority: ${priority} • Status: ${status}
+                ${actions}`;
+                
+            ticketList.appendChild(item);
+        });
+    } catch (err) {
+        console.error('Failed to load tickets:', err);
+        ticketList.innerHTML = '<li style="color: var(--danger-color); font-weight: 500;">Error loading tickets. Please check database connection.</li>';
+    }
+};
+async function closeTicket(ticketId) {
+    if (!confirm(`Are you sure you want to CLOSE ticket ${ticketId}? This action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/ticket/${ticketId}/close`, { method: 'PUT' });
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert(result.message);
+            // Reload the ticket list and metrics after successful closure
+            await loadTickets();
+            
+            // Re-fetch metrics to update the chart and AVG time
+            await fetchTicketMetrics(); 
+        } else {
+            alert(`Failed to close ticket: ${result.error || response.statusText}`);
+        }
+    } catch (error) {
+        console.error('Error closing ticket:', error);
+        alert('An error occurred while closing the ticket.');
+    }
+}
 function initTicketsPage() {
     const ticketForm = document.getElementById('ticket-form');
     const customerSelect = document.getElementById('ticket-customer-select');
@@ -359,31 +473,7 @@ function initTicketsPage() {
         }
     };
 
-    const loadTickets = async () => {
-        ticketList.innerHTML = '<li>Loading tickets...</li>';
-        try {
-            const r = await fetch('/api/tickets');
-            if (!r.ok) throw new Error('Failed to load tickets');
-            const tickets = await r.json();
-            if (!Array.isArray(tickets) || tickets.length === 0) {
-                ticketList.innerHTML = '<li>No recent tickets found.</li>';
-                return;
-            }
-            ticketList.innerHTML = '';
-            tickets.forEach(ticket => {
-                const item = document.createElement('li');
-                const issue = ticket.issue || 'No issue description';
-                const customer = ticket.customer_id || 'Unknown customer';
-                const priority = ticket.priority || 'Medium';
-                const status = ticket.status || 'Open';
-                item.textContent = `${issue} — Customer: ${customer} • Priority: ${priority} • Status: ${status}`;
-                ticketList.appendChild(item);
-            });
-        } catch (err) {
-            console.error('Failed to load tickets:', err);
-            ticketList.innerHTML = '<li style="color: red;">Error loading tickets.</li>';
-        }
-    };
+    
 
     if (ticketForm) {
         ticketForm.addEventListener('submit', async (e) => {
@@ -592,11 +682,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Run KPI fetchers in parallel (non-blocking)
         fetchCustomerKPIs();
         fetchOpenTickets();
-
+        fetchLeadKPIs(); 
         // Ticket metrics (chart) - fetch and then (if chart element exists) load Chart.js before rendering
         // Kick it off but don't await blocking UI
         fetchTicketMetrics().catch(err => console.warn("Ticket metrics failed:", err));
     }
+    
 
     // Customers page
     if (path === "/customers") {
