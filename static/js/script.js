@@ -40,23 +40,18 @@ function escapeHTML(str = '') {
    Chart loader utility
    ========================= */
 
-/**
- * Loads Chart.js from CDN only when needed.
- * Returns a Promise that resolves when Chart is available.
- */
 function loadChartJsIfNeeded() {
     return new Promise((resolve, reject) => {
         if (window.Chart) return resolve(window.Chart);
 
         const script = document.createElement('script');
-        // Use a reliable CDN; version can be changed safely later
         script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js";
         script.defer = true;
         script.onload = () => {
             if (window.Chart) resolve(window.Chart);
-            else reject(new Error("Chart loaded but window.Chart is not available"));
+            else reject(new Error("Chart loaded but Chart.js unavailable"));
         };
-        script.onerror = () => reject(new Error("Failed to load Chart.js library"));
+        script.onerror = () => reject(new Error("Failed to load Chart.js"));
         document.head.appendChild(script);
     });
 }
@@ -73,7 +68,6 @@ async function fetchCustomerKPIs() {
 
         const totalCustomersElement = document.getElementById('stat-total-customers');
         if (totalCustomersElement) {
-            // API returns total_customers
             totalCustomersElement.textContent = data.total_customers ?? 0;
         }
 
@@ -83,8 +77,161 @@ async function fetchCustomerKPIs() {
         }
     } catch (err) {
         console.error("Error loading Customer KPIs:", err);
-        const newCustomersElement = document.getElementById('stat-new-customers-30d');
-        if (newCustomersElement) newCustomersElement.textContent = 'Error';
+        const el = document.getElementById('stat-new-customers-30d');
+        if (el) el.textContent = 'Error';
+    }
+}
+
+// --------------------------
+//   NEW: SALES KPIs FETCHER
+// --------------------------
+async function fetchSalesKPIs() {
+    try {
+        const response = await fetch('/api/sales-kpis');
+        if (!response.ok) throw new Error("Failed to fetch Sales KPIs");
+
+        const data = await response.json();
+
+        const totalOpp = document.getElementById('stat-total-opportunities');
+        const openOpp = document.getElementById('stat-open-opportunities');
+        const wonOpp = document.getElementById('stat-won-opportunities');
+        const revenueOpp = document.getElementById('stat-total-revenue');
+
+        if (totalOpp) totalOpp.textContent = data.total_opportunities ?? 0;
+        if (openOpp) openOpp.textContent = data.open_opportunities ?? 0;
+        if (wonOpp) wonOpp.textContent = data.won_opportunities ?? 0;
+        if (revenueOpp) revenueOpp.textContent =
+            `$${Number(data.total_revenue_won ?? 0).toFixed(2)}`;
+
+        await loadChartJsIfNeeded();
+        renderSalesChart(data);
+
+    } catch (err) {
+        console.error("Sales KPIs Error:", err);
+    }
+}
+
+  
+
+function renderSalesChart(kpiData) {
+    const canvas = document.getElementById("sales-chart");
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    // Destroy old instance
+    if (window.salesChart) {
+        window.salesChart.destroy();
+    }
+
+    window.salesChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: ["Total Opp", "Open", "Won"],
+            datasets: [{
+                label: "Opportunities",
+                data: [
+                    kpiData.total_opportunities ?? 0,
+                    kpiData.open_opportunities ?? 0,
+                    kpiData.won_opportunities ?? 0
+                ],
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+        }
+    });
+}
+async function loadOpportunitiesForSalesPage() {
+    const container = document.getElementById("opportunities-list");
+    if (!container) return;
+
+    container.innerHTML = "Loading opportunities...";
+
+    try {
+        const res = await fetch("/api/opportunities");
+        const opps = await res.json();
+
+        if (!Array.isArray(opps) || opps.length === 0) {
+            container.innerHTML = "No opportunities found.";
+            return;
+        }
+
+        container.innerHTML = "";
+
+        opps.forEach(o => {
+            const div = document.createElement("div");
+            div.classList.add("stat-card");
+            div.style.marginBottom = "12px";
+
+            div.innerHTML = `
+                <h4>${o.name} <span style="color:gray;">(${o.stage})</span></h4>
+                <p>Email: ${o.email}</p>
+                <p>Amount: $${o.amount ?? 0}</p>
+                <p>Source: ${o.source}</p>
+
+                <button class="btn btn-primary btn-sm"
+                    onclick="markOpportunityWon('${o.id}')">
+                    Mark as Won
+                </button>
+            `;
+
+            container.appendChild(div);
+        });
+    } catch (err) {
+        container.innerHTML = "Error loading opportunities.";
+        console.error(err);
+    }
+}
+async function markOpportunityWon(opportunityId) {
+    if (!confirm("Mark this opportunity as WON?")) return;
+
+    try {
+        const res = await fetch(`/api/opportunity/${opportunityId}/status`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage: "Won" })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            alert("Failed: " + (data.error || "Unknown error"));
+            return;
+        }
+
+        alert("Opportunity marked as WON!");
+
+        // Refresh Sales KPIs & Chart
+        fetchSalesKPIs();
+        renderSalesChart();
+
+        // Reload list
+        loadOpportunitiesForSalesPage();
+
+    } catch (error) {
+        console.error(error);
+        alert("Error updating opportunity.");
+    }
+}
+
+
+
+async function fetchLeadKPIs() {
+    try {
+        const response = await fetch('/api/lead-kpis');
+        if (!response.ok) throw new Error('Failed to fetch lead KPIs');
+
+        const data = await response.json();
+        const el = document.getElementById('stat-new-leads');
+        if (el) el.textContent = data.new_leads_count ?? 0;
+
+    } catch (err) {
+        console.error("Error loading Lead KPIs:", err);
+        const el = document.getElementById('stat-new-leads');
+        if (el) el.textContent = 'Error';
     }
 }
 
@@ -94,77 +241,103 @@ async function fetchOpenTickets() {
         if (!response.ok) throw new Error("Failed to fetch tickets");
         const tickets = await response.json();
 
-        const openTickets = Array.isArray(tickets) ? tickets.filter(t => t.status === 'Open').length : 0;
-        const openTicketsElement = document.getElementById('stat-open-tickets');
-        if (openTicketsElement) openTicketsElement.textContent = openTickets;
+        const openTickets = tickets.filter(t => t.status === 'Open').length;
+        const el = document.getElementById('stat-open-tickets');
+        if (el) el.textContent = openTickets;
+
     } catch (err) {
-        console.error("Error loading Open Tickets:", err);
-        const openTicketsElement = document.getElementById('stat-open-tickets');
-        if (openTicketsElement) openTicketsElement.textContent = 'Error';
+        console.error("Error loading open tickets:", err);
+        const el = document.getElementById('stat-open-tickets');
+        if (el) el.textContent = 'Error';
     }
 }
-
 /* =========================
    Ticket Metrics & Chart
    ========================= */
 
 let _resolutionChartInstance = null;
 
-// Draw the Resolution Time Trend Chart (Dynamic)
 function renderResolutionChart(labels, values) {
     const canvas = document.getElementById('resolution-chart');
     if (!canvas) return;
 
-    // Destroy previous chart (important when re-loading)
-    if (window.resolutionChart) {
-        window.resolutionChart.destroy();
+    // If existing Chart.js instance exists, destroy it
+    if (window.resolutionChart && typeof window.resolutionChart.destroy === 'function') {
+        try { window.resolutionChart.destroy(); } catch (e) { /* ignore */ }
     }
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
 
+    // Create chart - keep minimal options so it fits inside your CSS card
     window.resolutionChart = new Chart(ctx, {
-        type: "line",
+        type: 'line',
         data: {
             labels: labels,
             datasets: [{
-                label: "Avg Resolution (hrs)",
+                label: 'Avg Resolution (hrs)',
                 data: values,
                 borderWidth: 3,
                 tension: 0.3,
-                fill: false
+                fill: false,
+                pointRadius: 4
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,   // <-- makes graph smaller
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { mode: 'index', intersect: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
         }
     });
 }
-
 
 async function fetchTicketMetrics() {
     const avgResolutionElement = document.getElementById('stat-avg-resolution');
 
     try {
         const response = await fetch('/api/ticket-metrics');
+        if (!response.ok) {
+            // Try to read JSON error message for better debugging
+            let errMsg = `HTTP ${response.status}`;
+            try {
+                const errJson = await response.json();
+                if (errJson && errJson.error) errMsg = errJson.error;
+            } catch (_) {}
+            throw new Error('Failed to fetch metrics: ' + errMsg);
+        }
+
         const data = await response.json();
 
-        if (avgResolutionElement)
-            avgResolutionElement.textContent = `${data.avg_resolution_hours.toFixed(1)} hrs`;
+        if (avgResolutionElement) {
+            avgResolutionElement.textContent = `${data.avg_resolution_hours ?? 0} hrs`;
+        }
 
-        // Render dynamic chart
-        renderResolutionChart(data.trend_labels, data.trend_values);
+        // Ensure Chart.js is loaded, then render
+        await loadChartJsIfNeeded();
+        renderResolutionChart(data.trend_labels || [], data.trend_values || []);
 
     } catch (err) {
-        console.error("Metrics error:", err);
-        if (avgResolutionElement) avgResolutionElement.textContent = 'Err';
+        console.error("Ticket Metrics Error:", err);
+        if (avgResolutionElement) avgResolutionElement.textContent = "Error";
+        // Destroy existing chart so stale data isn't shown
+        if (window.resolutionChart && typeof window.resolutionChart.destroy === 'function') {
+            try { window.resolutionChart.destroy(); } catch (_) {}
+        }
     }
 }
 
-  
+/* =========================
+   Customers page
+   ========================= */
 
 function initCustomersPage() {
-    // Guard elements (some may not exist if not on page)
     const addCustomerBtn = document.getElementById("add-customer-btn");
     const modal = document.getElementById("customer-modal");
     const modalCloseBtn = document.getElementById("modal-close-btn");
@@ -173,10 +346,7 @@ function initCustomersPage() {
     const modalTitle = document.getElementById("modal-title");
     const customerIdField = document.getElementById("customer-id");
 
-    if (!customerForm || !customersTableBody) {
-        // Nothing to init
-        return;
-    }
+    if (!customerForm || !customersTableBody) return;
 
     const openModal = () => {
         if (modalTitle) modalTitle.textContent = "Add New Customer";
@@ -316,14 +486,87 @@ function initCustomersPage() {
    Tickets page logic
    ========================= */
 
+const loadTickets = async () => {
+    const ticketList = document.getElementById('ticket-list');
+    if (!ticketList) return;
+
+    ticketList.innerHTML = '<li>Loading tickets...</li>';
+    try {
+        const r = await fetch('/api/tickets');
+        if (!r.ok) throw new Error('Failed to load tickets');
+        const tickets = await r.json();
+
+        if (!Array.isArray(tickets) || tickets.length === 0) {
+            ticketList.innerHTML = '<li>No recent tickets found.</li>';
+            return;
+        }
+
+        ticketList.innerHTML = '';
+        tickets.forEach(ticket => {
+            const item = document.createElement('li');
+            const issue = escapeHTML(ticket.issue || 'No issue description');
+            const customer = escapeHTML(ticket.customer_id || 'Unknown customer');
+            const priority = escapeHTML(ticket.priority || 'Medium');
+            const status = (ticket.status || 'Open');
+
+            let actions = '';
+            if (status === 'Open') {
+                actions = `
+                    <button class="btn btn-sm btn-danger" 
+                            style="margin-left: 10px; padding: 4px 8px; font-size: 0.75rem; border-radius: 6px;"
+                            onclick="closeTicket('${ticket.id}')">
+                        Close Ticket
+                    </button>`;
+            } else if (status === 'Closed' || status === 'Resolved') {
+                actions = '<span style="color: #4CAF50; font-weight: 600; margin-left: 10px;">✓ Resolved</span>';
+            } else if (status === 'Escalated') {
+                actions = '<span style="color: #FF5722; font-weight: 600; margin-left: 10px;">⚠ Escalated</span>';
+            }
+
+            item.innerHTML = `
+                <strong>${issue}</strong> 
+                — Customer: ${customer} • Priority: ${priority} • Status: ${escapeHTML(status)}
+                ${actions}`;
+            ticketList.appendChild(item);
+        });
+    } catch (err) {
+        console.error('Failed to load tickets:', err);
+        ticketList.innerHTML = '<li style="color: var(--danger-color); font-weight: 500;">Error loading tickets. Please check database connection.</li>';
+    }
+};
+
+async function closeTicket(ticketId) {
+    if (!confirm(`Are you sure you want to CLOSE ticket ${ticketId}? This action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/ticket/${ticketId}/close`, { method: 'PUT' });
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert(result.message);
+            await loadTickets();
+            // Update metrics after closing
+            await fetchTicketMetrics();
+        } else {
+            alert(`Failed to close ticket: ${result.error || response.statusText}`);
+        }
+    } catch (error) {
+        console.error('Error closing ticket:', error);
+        alert('An error occurred while closing the ticket.');
+    }
+}
+
 function initTicketsPage() {
     const ticketForm = document.getElementById('ticket-form');
     const customerSelect = document.getElementById('ticket-customer-select');
     const issueInput = document.getElementById('ticket-issue');
     const prioritySelect = document.getElementById('ticket-priority');
     const ticketStatus = document.getElementById('ticket-status');
-    const ticketList = document.getElementById('ticket-list');
 
+    // Guard: if ticket list not present, don't init
+    const ticketList = document.getElementById('ticket-list');
     if (!ticketList) return;
 
     const setTicketStatus = (message, isError = false) => {
@@ -359,32 +602,6 @@ function initTicketsPage() {
         }
     };
 
-    const loadTickets = async () => {
-        ticketList.innerHTML = '<li>Loading tickets...</li>';
-        try {
-            const r = await fetch('/api/tickets');
-            if (!r.ok) throw new Error('Failed to load tickets');
-            const tickets = await r.json();
-            if (!Array.isArray(tickets) || tickets.length === 0) {
-                ticketList.innerHTML = '<li>No recent tickets found.</li>';
-                return;
-            }
-            ticketList.innerHTML = '';
-            tickets.forEach(ticket => {
-                const item = document.createElement('li');
-                const issue = ticket.issue || 'No issue description';
-                const customer = ticket.customer_id || 'Unknown customer';
-                const priority = ticket.priority || 'Medium';
-                const status = ticket.status || 'Open';
-                item.textContent = `${issue} — Customer: ${customer} • Priority: ${priority} • Status: ${status}`;
-                ticketList.appendChild(item);
-            });
-        } catch (err) {
-            console.error('Failed to load tickets:', err);
-            ticketList.innerHTML = '<li style="color: red;">Error loading tickets.</li>';
-        }
-    };
-
     if (ticketForm) {
         ticketForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -414,6 +631,8 @@ function initTicketsPage() {
                 ticketForm.reset();
                 if (prioritySelect) prioritySelect.value = 'Medium';
                 await loadTickets();
+                // update metrics after creating
+                await fetchTicketMetrics();
             } catch (err) {
                 console.error('Error creating ticket:', err);
                 setTicketStatus(`Error creating ticket: ${err.message}`, true);
@@ -421,14 +640,13 @@ function initTicketsPage() {
         });
     }
 
-    // initial
+    // initial load
     populateCustomers();
     loadTickets();
 }
 
 /* =========================
    Leads & Loyalty handlers
-   (kept intact from original)
    ========================= */
 
 function initLeadsAndLoyalty() {
@@ -459,7 +677,6 @@ function initLeadsAndLoyalty() {
         });
     }
 
-    // customers page loyalty forms
     const loyaltyProfileForm = document.getElementById('loyalty-profile-form');
     const loyaltyOutput = document.getElementById('loyalty-output');
 
@@ -557,13 +774,135 @@ function initLeadsAndLoyalty() {
         });
     }
 }
+let currentLeadId = null;
 
+function openAssignLeadModal(leadId) {
+    currentLeadId = leadId;
+    document.getElementById("assign-lead-modal").style.display = "flex";
+}
+
+function closeAssignLeadModal() {
+    document.getElementById("assign-lead-modal").style.display = "none";
+}
+
+document.getElementById("close-assign-modal")?.addEventListener("click", () => {
+    closeAssignLeadModal();
+});
+const assignLeadForm = document.getElementById("assign-lead-form");
+
+if (assignLeadForm) {
+    assignLeadForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const repId = document.getElementById("rep-id").value.trim();
+        const repName = document.getElementById("rep-name").value.trim();
+
+        if (!repId) {
+            alert("Sales Rep ID is required");
+            return;
+        }
+
+        const response = await fetch(`/api/lead/${currentLeadId}/assign`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                rep_id: repId,
+                rep_name: repName
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            alert("Lead assigned successfully!");
+            closeAssignLeadModal();
+
+            // reload leads list if needed
+        } else {
+            alert("Error: " + (data.error || "Failed"));
+        }
+    });
+}
+
+// script.js (Add Payment Logic)
+
+function initPaymentLogic() {
+    const paymentForm = document.getElementById('payment-form');
+    const paymentOutput = document.getElementById('payment-output');
+    const payMethodSelect = document.getElementById('pay-method');
+    const cardGroup = document.getElementById('card-group');
+    
+    if (!paymentForm) return; // Only run if the form exists
+
+    // Helper to display results
+    const showPaymentResult = (message, isError = false) => {
+        paymentOutput.innerHTML = `<pre${isError ? ' class="error"' : ''}>${message}</pre>`;
+    };
+    
+    // Toggle Card Number field visibility
+    payMethodSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'Card') {
+            cardGroup.style.display = 'block';
+        } else {
+            cardGroup.style.display = 'none';
+        }
+    });
+
+    // Handle form submission
+    paymentForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const method = payMethodSelect.value;
+        const payload = {
+            customer_id: document.getElementById('pay-customer').value.trim(),
+            amount: document.getElementById('pay-amount').value,
+            method: method,
+            card_number: (method === 'Card') ? document.getElementById('pay-card').value.trim() : null
+        };
+
+        try {
+            const response = await fetch('/api/payment/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                showPaymentResult(JSON.stringify(data, null, 2), false);
+            } else {
+                // Handle 400 failure status from mock gateway
+                const errorMessage = data.error || data.message || 'Payment failed due to an unknown error.';
+                showPaymentResult(`STATUS: Failed\nError: ${errorMessage}\nTXN ID: ${data.transaction_id || 'N/A'}`, true);
+            }
+        } catch (err) {
+            console.error('Payment processing failed:', err);
+            showPaymentResult(`SYSTEM ERROR: Could not reach payment server.`, true);
+        }
+    });
+}
+
+// Ensure initPaymentLogic is called on DOM load:
+// Find your main DOMContentLoaded handler and add the call:
+/*
+document.addEventListener("DOMContentLoaded", async () => {
+    // ... existing setup ...
+    
+    // Page-specific initializers
+    // ...
+    
+    // Always initialize payment logic if forms are present
+    initPaymentLogic(); // <--- ADD THIS LINE
+    
+    // ... rest of the code
+});
+*/
 /* =========================
    Main initialization
    ========================= */
 
 document.addEventListener("DOMContentLoaded", async () => {
-    // Theme toggling initialization
     const themeToggle = document.getElementById("theme-toggle");
     const storedTheme = localStorage.getItem("theme");
     if (storedTheme === "dark") {
@@ -576,7 +915,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Mobile sidebar toggle
     const mobileMenuBtn = document.getElementById("mobile-menu-btn");
     if (mobileMenuBtn) {
         mobileMenuBtn.addEventListener("click", () => {
@@ -584,7 +922,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Page-specific initializers
     const path = window.location.pathname;
 
     // Dashboard root
@@ -592,10 +929,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Run KPI fetchers in parallel (non-blocking)
         fetchCustomerKPIs();
         fetchOpenTickets();
-
-        // Ticket metrics (chart) - fetch and then (if chart element exists) load Chart.js before rendering
-        // Kick it off but don't await blocking UI
-        fetchTicketMetrics().catch(err => console.warn("Ticket metrics failed:", err));
+        fetchLeadKPIs();
+        // ticket metrics (chart)
+        try {
+            await loadChartJsIfNeeded();
+            await fetchTicketMetrics();
+        } catch (err) {
+            console.warn("Ticket metrics failed:", err);
+        }
     }
 
     // Customers page
@@ -606,8 +947,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Tickets page
     if (path === "/tickets") {
         initTicketsPage();
+
+        // Ensure Chart.js loaded and then fetch ticket metrics
+        try {
+            await loadChartJsIfNeeded();
+            await fetchTicketMetrics();
+        } catch (err) {
+            console.warn("Failed to initialize charts on tickets page:", err);
+        }
     }
+
+    // Sales page
+    if (path === "/sales") {
+    fetchSalesKPIs();
+    renderSalesChart();
+    loadOpportunitiesForSalesPage();
+}
+
 
     // Always initialize leads & loyalty handlers if their forms are present
     initLeadsAndLoyalty();
 });
+

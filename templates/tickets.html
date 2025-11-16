@@ -5,6 +5,17 @@
 {% block page_header %}Support Tickets{% endblock %}
 
 {% block content %}
+    <div class="stat-grid">
+        <div class="card stat-card">
+            <h3>Avg Resolution Time</h3>
+            <p id="stat-avg-resolution">Loading...</p>
+        </div>
+        <div class="card">
+            <h3>Resolution Trend (Last 7)</h3>
+            <canvas id="resolution-chart" width="400" height="150"></canvas>
+        </div>
+    </div>
+    
     <div class="grid">
         <section class="card">
             <h3>Create Support Ticket</h3>
@@ -42,4 +53,3 @@
         </section>
     </div>
 {% endblock %}
-

@@ -487,3 +487,6 @@ body, html {
     height: 200px !important;   /* smaller graph */
     max-height: 220px;
 }
+#sales-chart {
+    max-height: 260px !important;
+}
