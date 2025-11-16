@@ -286,13 +286,31 @@
 
             // Show last 5 alerts
             const recentAlerts = requestStats.performanceAlerts.slice(-5).reverse();
-            alertsDiv.innerHTML = recentAlerts.map(alert => `
-                <div class="alert-item alert-warning">
-                    <strong>⚠️ Slow Response</strong><br>
-                    <span style="font-size: 0.9rem;">${alert.path}</span><br>
-                    <span style="font-size: 0.85rem; opacity: 0.8;">Response time: ${alert.time.toFixed(3)}s</span>
-                </div>
-            `).join('');
+            // Clear previous alerts
+            alertsDiv.innerHTML = '';
+            recentAlerts.forEach(alert => {
+                const div = document.createElement('div');
+                div.className = 'alert-item alert-warning';
+
+                const strong = document.createElement('strong');
+                strong.textContent = '⚠️ Slow Response';
+                div.appendChild(strong);
+                div.appendChild(document.createElement('br'));
+
+                const pathSpan = document.createElement('span');
+                pathSpan.style.fontSize = '0.9rem';
+                pathSpan.textContent = alert.path;
+                div.appendChild(pathSpan);
+                div.appendChild(document.createElement('br'));
+
+                const timeSpan = document.createElement('span');
+                timeSpan.style.fontSize = '0.85rem';
+                timeSpan.style.opacity = '0.8';
+                timeSpan.textContent = `Response time: ${alert.time.toFixed(3)}s`;
+                div.appendChild(timeSpan);
+
+                alertsDiv.appendChild(div);
+            });
         }
 
         function checkSystemHealth() {
