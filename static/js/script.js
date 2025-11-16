@@ -92,47 +92,6 @@ async function fetchSalesKPIs() {
 
         const data = await response.json();
 
-        const totalEl = document.getElementById('stat-total-opportunities');
-        const openEl = document.getElementById('stat-open-opportunities');
-        const wonEl  = document.getElementById('stat-won-opportunities');
-        const revenueEl = document.getElementById('stat-revenue-won');
-
-        if (totalEl) totalEl.textContent = data.total_opportunities ?? 0;
-        if (openEl) openEl.textContent = data.open_opportunities ?? 0;
-        if (wonEl) wonEl.textContent = data.won_opportunities ?? 0;
-
-        if (revenueEl) {
-            revenueEl.textContent = `$${(data.total_revenue_won ?? 0).toFixed(2)}`;
-        }
-
-    } catch (err) {
-        console.error("Error loading Sales KPIs:", err);
-
-        const errorIds = [
-            'stat-total-opportunities',
-            'stat-open-opportunities',
-            'stat-won-opportunities',
-            'stat-revenue-won'
-        ];
-
-        errorIds.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = "Error";
-        });
-    }
-}
-/* =========================
-   SALES KPIs (Sales Page)
-   ========================= */
-
-async function fetchSalesKPIs() {
-    try {
-        const response = await fetch('/api/sales-kpis');
-        if (!response.ok) throw new Error("Failed to fetch Sales KPIs");
-
-        const data = await response.json();
-
-        // Bind values
         const totalOpp = document.getElementById('stat-total-opportunities');
         const openOpp = document.getElementById('stat-open-opportunities');
         const wonOpp = document.getElementById('stat-won-opportunities');
@@ -144,7 +103,6 @@ async function fetchSalesKPIs() {
         if (revenueOpp) revenueOpp.textContent =
             `$${Number(data.total_revenue_won ?? 0).toFixed(2)}`;
 
-        // Now draw the Sales Chart
         await loadChartJsIfNeeded();
         renderSalesChart(data);
 
@@ -152,9 +110,8 @@ async function fetchSalesKPIs() {
         console.error("Sales KPIs Error:", err);
     }
 }
-/* =========================
-   SALES PERFORMANCE CHART
-   ========================= */
+
+  
 
 function renderSalesChart(kpiData) {
     const canvas = document.getElementById("sales-chart");
@@ -194,13 +151,10 @@ async function loadOpportunitiesForSalesPage() {
     container.innerHTML = "Loading opportunities...";
 
     try {
-        const res = await fetch("/api/leads"); // You only show leads now
-        const leads = await res.json();
+        const res = await fetch("/api/opportunities");
+        const opps = await res.json();
 
-        const oppRes = await fetch("/api/opportunities");
-        const opps = await oppRes.json();
-
-        if (!Array.isArray(opps)) {
+        if (!Array.isArray(opps) || opps.length === 0) {
             container.innerHTML = "No opportunities found.";
             return;
         }
@@ -210,14 +164,16 @@ async function loadOpportunitiesForSalesPage() {
         opps.forEach(o => {
             const div = document.createElement("div");
             div.classList.add("stat-card");
-            div.style.marginBottom = "10px";
+            div.style.marginBottom = "12px";
 
             div.innerHTML = `
                 <h4>${o.name} <span style="color:gray;">(${o.stage})</span></h4>
                 <p>Email: ${o.email}</p>
-                <p>Source: ${o.source}</p>
                 <p>Amount: $${o.amount ?? 0}</p>
-                <button class="btn btn-primary btn-sm" onclick="markOpportunityWon('${o.id}')">
+                <p>Source: ${o.source}</p>
+
+                <button class="btn btn-primary btn-sm"
+                    onclick="markOpportunityWon('${o.id}')">
                     Mark as Won
                 </button>
             `;
@@ -229,11 +185,11 @@ async function loadOpportunitiesForSalesPage() {
         console.error(err);
     }
 }
-async function markOpportunityWon(id) {
+async function markOpportunityWon(opportunityId) {
     if (!confirm("Mark this opportunity as WON?")) return;
 
     try {
-        const res = await fetch(`/api/opportunity/${id}/status`, {
+        const res = await fetch(`/api/opportunity/${opportunityId}/status`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ stage: "Won" })
@@ -248,18 +204,16 @@ async function markOpportunityWon(id) {
 
         alert("Opportunity marked as WON!");
 
-        // Refresh Sales KPIs
+        // Refresh Sales KPIs & Chart
         fetchSalesKPIs();
-
-        // Refresh the chart
         renderSalesChart();
 
-        // Refresh Opportunities list
+        // Reload list
         loadOpportunitiesForSalesPage();
 
-    } catch (err) {
+    } catch (error) {
+        console.error(error);
         alert("Error updating opportunity.");
-        console.error(err);
     }
 }
 
@@ -820,6 +774,56 @@ function initLeadsAndLoyalty() {
         });
     }
 }
+let currentLeadId = null;
+
+function openAssignLeadModal(leadId) {
+    currentLeadId = leadId;
+    document.getElementById("assign-lead-modal").style.display = "flex";
+}
+
+function closeAssignLeadModal() {
+    document.getElementById("assign-lead-modal").style.display = "none";
+}
+
+document.getElementById("close-assign-modal")?.addEventListener("click", () => {
+    closeAssignLeadModal();
+});
+const assignLeadForm = document.getElementById("assign-lead-form");
+
+if (assignLeadForm) {
+    assignLeadForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const repId = document.getElementById("rep-id").value.trim();
+        const repName = document.getElementById("rep-name").value.trim();
+
+        if (!repId) {
+            alert("Sales Rep ID is required");
+            return;
+        }
+
+        const response = await fetch(`/api/lead/${currentLeadId}/assign`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                rep_id: repId,
+                rep_name: repName
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            alert("Lead assigned successfully!");
+            closeAssignLeadModal();
+
+            // reload leads list if needed
+        } else {
+            alert("Error: " + (data.error || "Failed"));
+        }
+    });
+}
+
 
 /* =========================
    Main initialization
@@ -891,3 +895,4 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Always initialize leads & loyalty handlers if their forms are present
     initLeadsAndLoyalty();
 });
+

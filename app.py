@@ -1132,6 +1132,118 @@ def get_system_logs():
         logger.exception("Error reading log file")
         return jsonify({"logs": ["Error reading logs."]}), 500
 
+@app.route('/api/opportunities', methods=['GET'])
+def get_opportunities():
+    db = get_db()
+    if db is None:
+        return jsonify({"error": "Database connection failed"}), 503
 
+    try:
+        opps = []
+        docs = db.collection('opportunities').stream()
+        for doc in docs:
+            o = doc.to_dict()
+            o['id'] = doc.id
+            opps.append(o)
+
+        return jsonify(opps), 200
+    except Exception as e:
+        print("Error fetching opportunities:", e)
+        return jsonify({"error": "Database error"}), 500
+@app.route('/api/sales-reps', methods=['GET'])
+def get_sales_reps():
+    try:
+        db = get_db_or_raise()
+        reps = []
+        docs = db.collection('sales_reps').stream()
+        for d in docs:
+            rep = d.to_dict()
+            rep['id'] = d.id  # Firestore ID as rep_id
+            reps.append(rep)
+        return jsonify(reps), 200
+    except Exception:
+        logger.exception("Error fetching sales reps")
+        return jsonify({"error": "Internal Server Error"}), 500
+# app.py (New routes for Epic 12: Payments & Notifications)
+
+import random # Add this import at the top of app.py
+
+# ... (other imports) ...
+
+# Epic 12: Payments & Notifications
+
+@app.route('/api/payment/process', methods=['POST'])
+def process_payment():
+    db = get_db()
+    if db is None:
+        return jsonify({"error": "Database connection failed"}), 503
+
+    data = request.json
+    customer_id = data.get('customer_id')
+    amount = data.get('amount')
+    method = data.get('method')
+    card_number = data.get('card_number') # Used for mock failure logic
+
+    if not customer_id or not amount or not method:
+        return jsonify({"error": "Missing required fields: customer_id, amount, method"}), 400
+
+    try:
+        amount = float(amount)
+        if amount <= 0:
+            return jsonify({"error": "Amount must be greater than zero"}), 400
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid amount provided"}), 400
+
+    # --- MOCK GATEWAY LOGIC ---
+    transaction_id = f"TXN-{random.randint(10000, 99999)}"
+    
+    # 1. Simulate failure for specific inputs (e.g., test card number)
+    if method == 'Card' and card_number == '4000000000000001':
+        status = "Failed"
+        reason = "Test card declined by mock bank."
+        
+    # 2. Simulate random failure (10% chance)
+    elif random.random() < 0.1:
+        status = "Failed"
+        reason = "Gateway timeout/random error."
+        
+    # 3. Success case
+    else:
+        status = "Success"
+        reason = "Payment approved."
+        
+    # 4. Log the payment attempt (Essential for the next Epic 12 stories)
+    # We will log to a new 'payments' collection
+    payment_log = {
+        'customer_id': customer_id,
+        'amount': amount,
+        'method': method,
+        'status': status,
+        'transaction_id': transaction_id,
+        'reason': reason,
+        'timestamp': firestore.SERVER_TIMESTAMP
+    }
+    
+    db.collection('payments').add(payment_log)
+
+    # --- END MOCK GATEWAY LOGIC ---
+
+    if status == "Success":
+        return jsonify({
+            "success": True,
+            "status": "Success",
+            "transaction_id": transaction_id,
+            "message": "Payment processed and confirmed."
+        }), 200
+    else:
+        # For failures, we return 400 (Bad Request/Client Action Required)
+        return jsonify({
+            "success": False,
+            "status": "Failed",
+            "transaction_id": transaction_id,
+            "error": reason
+        }), 400
+    
+# ... (rest of the app.py file)
 if __name__ == "__main__":
     app.run()
