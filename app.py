@@ -518,26 +518,35 @@ def tickets_endpoint():
 @app.route('/api/ticket/<string:ticket_id>/close', methods=['PUT'])
 # app.py
 
+
+
 @app.route('/api/ticket/<id>/close', methods=['PUT'])
 def close_ticket(id):
-    db = get_db()
-    if db is None:
+    try:
+        db = get_db_or_raise()
+    except RuntimeError:
         return jsonify({"error": "Database connection failed"}), 503
 
     try:
         ticket_ref = db.collection('tickets').document(id)
-        if not ticket_ref.get().exists:
+        ticket_doc = ticket_ref.get()
+
+        if not ticket_doc.exists:
             return jsonify({"error": "Ticket not found"}), 404
 
-        # Update the status and set the resolution timestamp
+        # Update with test-expected fields
         ticket_ref.update({
-            'status': 'Closed',
-            'closedAt': firestore.SERVER_TIMESTAMP
+            "status": "Closed",
+            "resolved_at": firestore.SERVER_TIMESTAMP,
+            "updated_at": firestore.SERVER_TIMESTAMP
         })
-        
-        return jsonify({"success": True, "message": f"Ticket {id} closed successfully"}), 200
-    except Exception as e:
-        print(f"Error closing ticket: {e}")
+
+        return jsonify({
+            "success": True,
+            "message": "Ticket closed"
+        }), 200
+
+    except Exception:
         return jsonify({"error": "Database connection failed"}), 503
 
 @app.route('/api/tickets/check-sla', methods=['POST'])
@@ -919,17 +928,14 @@ def sales_page():
 
 @app.route('/api/ticket-metrics', methods=['GET'])
 
+@app.route('/api/ticket-metrics', methods=['GET'])
 def get_ticket_metrics():
-    """
-    Calculates:
-      - Average resolution time (hours)
-      - 4-week resolution trend
-    """
     try:
-        db = get_db()
-        if db is None:
-            return jsonify({"error": "Database connection failed"}), 503
+        db = get_db_or_raise()
+    except RuntimeError:
+        return jsonify({"error": "Database connection failed"}), 503
 
+    try:
         tickets = db.collection('tickets').stream()
 
         total_resolved = 0
@@ -945,10 +951,8 @@ def get_ticket_metrics():
         }
 
         def safe_convert(ts):
-            """Converts Firestore Timestamp or ISO string to naive datetime."""
             if ts is None:
                 return None
-            # Firestore timestamp object (has to_datetime)
             if hasattr(ts, "to_datetime"):
                 try:
                     return ts.to_datetime().replace(tzinfo=None)
@@ -958,41 +962,32 @@ def get_ticket_metrics():
                 return ts.replace(tzinfo=None)
             if isinstance(ts, str):
                 try:
-                    # Python's fromisoformat can parse many ISO formats, fallback simple parsing
                     return datetime.fromisoformat(ts).replace(tzinfo=None)
                 except Exception:
-                    # Last resort: attempt a common format
-                    try:
-                        return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f%z").replace(tzinfo=None)
-                    except Exception:
-                        return None
+                    return None
             return None
 
         for doc in tickets:
             ticket = doc.to_dict()
 
-            # Firestore fields
-            created_at_ts = ticket.get("created_at")
-            closed_at_ts = ticket.get("closedAt")
+            created_at_ts = ticket.get("created_at") or ticket.get("createdAt")
+            resolved_at_ts = ticket.get("resolved_at") or ticket.get("closedAt")
 
-            # Only closed tickets count
             if ticket.get("status") != "Closed":
                 continue
 
             created_at = safe_convert(created_at_ts)
-            resolved_at = safe_convert(closed_at_ts)
+            resolved_at = safe_convert(resolved_at_ts)
 
             if not created_at or not resolved_at:
                 continue
 
-            # Calculate resolution time
             seconds = (resolved_at - created_at).total_seconds()
             hours = seconds / 3600
 
             total_resolved += 1
             total_seconds += seconds
 
-            # Bucket assignment for last 4 weeks
             for i in range(4):
                 start = today - timedelta(days=(i + 1) * 7)
                 end = today - timedelta(days=i * 7)
@@ -1001,7 +996,6 @@ def get_ticket_metrics():
                     weekly_buckets[f"Week {4 - i}"].append(hours)
                     break
 
-        # Final averages
         avg_hours = round((total_seconds / total_resolved) / 3600, 1) if total_resolved else 0
 
         trend_labels = list(weekly_buckets.keys())
@@ -1020,6 +1014,7 @@ def get_ticket_metrics():
     except Exception as e:
         print("Error calculating ticket metrics:", e)
         return jsonify({"error": "Database connection failed"}), 503
+
 
 @app.route('/api/lead-kpis', methods=['GET'])
 
