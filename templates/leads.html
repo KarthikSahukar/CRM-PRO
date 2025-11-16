@@ -355,7 +355,13 @@
             // Show status message
             function showStatus(message, type) {
                 const icon = type === 'success' ? '✅' : '❌';
-                statusMessage.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+                statusMessage.innerHTML = '';
+                const iconSpan = document.createElement('span');
+                iconSpan.textContent = icon;
+                const messageSpan = document.createElement('span');
+                messageSpan.textContent = message;
+                statusMessage.appendChild(iconSpan);
+                statusMessage.appendChild(messageSpan);
                 statusMessage.className = `status-message ${type}`;
                 statusMessage.style.display = 'flex';
                 
