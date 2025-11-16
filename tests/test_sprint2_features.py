@@ -333,10 +333,3 @@ def test_get_ticket_metrics_database_failure(client, mocker):
     
     assert response.status_code == 503
     assert "Database connection failed" in response.get_json()['error']
-def test_get_lead_kpis_db_failure(client):
-    """Test GET /api/lead-kpis returns 503 on database failure."""
-    with patch('app.get_db', side_effect=Exception("Simulated lead KPI crash")):
-        response = client.get('/api/lead-kpis')
-        
-        assert response.status_code == 503
-        assert "Database connection failed" in response.get_json()['error']

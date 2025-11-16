@@ -469,19 +469,12 @@ def tickets_endpoint():
 
         if request.method == 'GET':
             tickets = []
-            # keep ordering by created_at; ensure descending
-            try:
-                ticket_query = (
-                    db_conn.collection('tickets')
-                    .order_by('created_at', direction=firestore.Query.DESCENDING)
-                    .limit(20)
-                )
-                docs = ticket_query.stream()
-            except Exception:
-                # Fallback in case index is missing or ordering fails
-                docs = db_conn.collection('tickets').stream()
-
-            for doc in docs:
+            ticket_query = (
+                db_conn.collection('tickets')
+                .order_by('created_at', direction=firestore.Query.DESCENDING)
+                .limit(20)
+            )
+            for doc in ticket_query.stream():
                 ticket = doc.to_dict()
                 ticket['id'] = doc.id
                 tickets.append(ticket)
@@ -522,27 +515,27 @@ def tickets_endpoint():
         logger.exception("Error creating support ticket")
         return jsonify({"error": "Internal Server Error"}), 500
 
-# --- FIXED: single, correct close route for tickets ---
 @app.route('/api/ticket/<string:ticket_id>/close', methods=['PUT'])
-def close_ticket(ticket_id):
+# app.py
+
+@app.route('/api/ticket/<id>/close', methods=['PUT'])
+def close_ticket(id):
     db = get_db()
     if db is None:
         return jsonify({"error": "Database connection failed"}), 503
 
     try:
-        ref = db.collection('tickets').document(ticket_id)
-        doc = ref.get()
-
-        if not doc.exists:
+        ticket_ref = db.collection('tickets').document(id)
+        if not ticket_ref.get().exists:
             return jsonify({"error": "Ticket not found"}), 404
 
         # Update the status and set the resolution timestamp
-        ref.update({
+        ticket_ref.update({
             'status': 'Closed',
             'closedAt': firestore.SERVER_TIMESTAMP
         })
         
-        return jsonify({"success": True, "message": f"Ticket {ticket_id} closed successfully"}), 200
+        return jsonify({"success": True, "message": f"Ticket {id} closed successfully"}), 200
     except Exception as e:
         print(f"Error closing ticket: {e}")
         return jsonify({"error": "Database connection failed"}), 503
@@ -923,6 +916,7 @@ def sales_page():
 # DYNAMIC TICKET METRICS ROUTE
 # ============================
 
+
 @app.route('/api/ticket-metrics', methods=['GET'])
 
 def get_ticket_metrics():
@@ -1027,7 +1021,6 @@ def get_ticket_metrics():
         print("Error calculating ticket metrics:", e)
         return jsonify({"error": "Database connection failed"}), 503
 
-
 @app.route('/api/lead-kpis', methods=['GET'])
 
 def get_lead_kpis():
@@ -1048,6 +1041,8 @@ def get_lead_kpis():
     except Exception as e:
         print(f"Error calculating lead KPI: {e}")
         return jsonify({"error": "Database connection failed"}), 503
+
+
 
 
 
@@ -1132,118 +1127,6 @@ def get_system_logs():
         logger.exception("Error reading log file")
         return jsonify({"logs": ["Error reading logs."]}), 500
 
-@app.route('/api/opportunities', methods=['GET'])
-def get_opportunities():
-    db = get_db()
-    if db is None:
-        return jsonify({"error": "Database connection failed"}), 503
 
-    try:
-        opps = []
-        docs = db.collection('opportunities').stream()
-        for doc in docs:
-            o = doc.to_dict()
-            o['id'] = doc.id
-            opps.append(o)
-
-        return jsonify(opps), 200
-    except Exception as e:
-        print("Error fetching opportunities:", e)
-        return jsonify({"error": "Database error"}), 500
-@app.route('/api/sales-reps', methods=['GET'])
-def get_sales_reps():
-    try:
-        db = get_db_or_raise()
-        reps = []
-        docs = db.collection('sales_reps').stream()
-        for d in docs:
-            rep = d.to_dict()
-            rep['id'] = d.id  # Firestore ID as rep_id
-            reps.append(rep)
-        return jsonify(reps), 200
-    except Exception:
-        logger.exception("Error fetching sales reps")
-        return jsonify({"error": "Internal Server Error"}), 500
-# app.py (New routes for Epic 12: Payments & Notifications)
-
-import random # Add this import at the top of app.py
-
-# ... (other imports) ...
-
-# Epic 12: Payments & Notifications
-
-@app.route('/api/payment/process', methods=['POST'])
-def process_payment():
-    db = get_db()
-    if db is None:
-        return jsonify({"error": "Database connection failed"}), 503
-
-    data = request.json
-    customer_id = data.get('customer_id')
-    amount = data.get('amount')
-    method = data.get('method')
-    card_number = data.get('card_number') # Used for mock failure logic
-
-    if not customer_id or not amount or not method:
-        return jsonify({"error": "Missing required fields: customer_id, amount, method"}), 400
-
-    try:
-        amount = float(amount)
-        if amount <= 0:
-            return jsonify({"error": "Amount must be greater than zero"}), 400
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid amount provided"}), 400
-
-    # --- MOCK GATEWAY LOGIC ---
-    transaction_id = f"TXN-{random.randint(10000, 99999)}"
-    
-    # 1. Simulate failure for specific inputs (e.g., test card number)
-    if method == 'Card' and card_number == '4000000000000001':
-        status = "Failed"
-        reason = "Test card declined by mock bank."
-        
-    # 2. Simulate random failure (10% chance)
-    elif random.random() < 0.1:
-        status = "Failed"
-        reason = "Gateway timeout/random error."
-        
-    # 3. Success case
-    else:
-        status = "Success"
-        reason = "Payment approved."
-        
-    # 4. Log the payment attempt (Essential for the next Epic 12 stories)
-    # We will log to a new 'payments' collection
-    payment_log = {
-        'customer_id': customer_id,
-        'amount': amount,
-        'method': method,
-        'status': status,
-        'transaction_id': transaction_id,
-        'reason': reason,
-        'timestamp': firestore.SERVER_TIMESTAMP
-    }
-    
-    db.collection('payments').add(payment_log)
-
-    # --- END MOCK GATEWAY LOGIC ---
-
-    if status == "Success":
-        return jsonify({
-            "success": True,
-            "status": "Success",
-            "transaction_id": transaction_id,
-            "message": "Payment processed and confirmed."
-        }), 200
-    else:
-        # For failures, we return 400 (Bad Request/Client Action Required)
-        return jsonify({
-            "success": False,
-            "status": "Failed",
-            "transaction_id": transaction_id,
-            "error": reason
-        }), 400
-    
-# ... (rest of the app.py file)
 if __name__ == "__main__":
     app.run()
