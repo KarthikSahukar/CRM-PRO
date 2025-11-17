@@ -17,6 +17,8 @@ from flask_jwt_extended import (
     get_jwt_identity, set_access_cookies, unset_jwt_cookies, verify_jwt_in_request
 )
 from flask import make_response, redirect, url_for #for epic 1 
+from flask import g
+from flask_jwt_extended import get_jwt  # <--- Make sure this is imported!
 
 # --- Logging Configuration (Updated for Epic 9 UI) ---
 # Create a file handler to store logs so the System Monitor page can read them
@@ -43,14 +45,41 @@ app.config["JWT_ACCESS_COOKIE_NAME"] = "access_token_cookie"
 
 jwt = JWTManager(app)
 
+# --- RBAC MIDDLEWARE ---
+
+@app.before_request
+def load_user_role():
+    """
+    Extracts the role from the JWT (if present) and stores it in 'g.role'
+    so we can use it in the HTML templates.
+    """
+    g.role = None # Default to None
+    try:
+        # Check if token exists, but don't crash if it doesn't (optional=True)
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+        if claims:
+            # Get the role, default to 'User' if missing
+            g.role = claims.get("role", "User")
+    except:
+        pass # Not logged in, keep g.role as None
+
+@app.context_processor
+def inject_role():
+    """Makes 'current_role' available in ALL HTML templates automatically."""
+    return dict(current_role=g.role)
+
+
 # Middleware: Protect Pages (Epic 1)
 # This forces the user to Login if they try to access pages without a token
 @app.before_request
 def check_auth():
     # List of routes that do NOT require login
-    public_endpoints = ['login_page', 'api_login', 'static']
+    # ✅ ADDED: 'reset_password' so people can reset without logging in
+    public_endpoints = ['login_page', 'api_login', 'static', 'reset_password']
     
-    if request.endpoint in public_endpoints or request.endpoint is None:
+    # If the request is for a public page, let it pass
+    if request.endpoint in public_endpoints or (request.endpoint and request.endpoint.startswith('static')):
         return
     
     # For all other routes, check for the token
@@ -59,6 +88,7 @@ def check_auth():
     except:
         # If validation fails, redirect to login
         return redirect(url_for('login_page'))
+    
 
 # --- Middleware: Performance Monitoring (Epic 9) ---
 # This satisfies the "System performance" and "Monitoring" requirements
@@ -167,27 +197,31 @@ def login_page():
 def api_login():
     """
     Epic 1: Handle User Login
-    Verifies credentials and issues a JWT Token in a secure cookie.
+    Supports Admin, Manager, and User roles for testing.
     """
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
 
-    # --- HARDCODED ADMIN USER (For Sprint 1 Demo) ---
-    # In Sprint 2, we will connect this to a 'users' collection in Firestore
-    admin_email = "admin@crm.com"
-    admin_pass = "admin123"
+    # --- MOCK USER DATABASE ---
+    users = {
+        "admin@crm.com":   {"pass": "admin123", "role": "Admin"},
+        "manager@crm.com": {"pass": "manager123", "role": "Manager"},
+        "support@crm.com": {"pass": "support123", "role": "User"}
+    }
 
-    if email == admin_email and password == admin_pass:
-        # Create the token
-        access_token = create_access_token(identity=email, additional_claims={"role": "Admin"})
+    user = users.get(email)
+
+    if user and user['pass'] == password:
+        # Create token with the specific role
+        access_token = create_access_token(identity=email, additional_claims={"role": user['role']})
         
-        # Create a response that sets the cookie automatically
-        resp = jsonify({"success": True, "message": "Login successful"})
+        resp = jsonify({"success": True, "message": f"Welcome {user['role']}!"})
         set_access_cookies(resp, access_token)
         return resp, 200
     
-    return jsonify({"success": False, "message": "Invalid email or password"}), 401
+    return jsonify({"success": False, "message": "Invalid credentials"}), 401
+
 
 @app.route('/logout')
 def logout():
@@ -196,6 +230,32 @@ def logout():
     unset_jwt_cookies(resp)
     return resp
 
+@app.route('/api/auth/reset-password', methods=['POST'])
+def reset_password():
+    """
+    Story: Enable password reset via email.
+    Simulates sending an email by logging the link to the server console.
+    """
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({"success": False, "message": "Email is required"}), 400
+
+    # 1. Generate a fake reset token (In real life, save this to DB)
+    reset_token = secrets.token_urlsafe(16)
+    
+    # 2. Construct the link
+    reset_link = f"http://127.0.0.1:5000/reset-password?token={reset_token}"
+
+    # 3. SIMULATE EMAIL SENDING (Log to console)
+    logger.info(f"---------------------------------------------------")
+    logger.info(f" [EMAIL SIMULATION] To: {email}")
+    logger.info(f" Subject: Password Reset Request")
+    logger.info(f" Body: Click here to reset your password: {reset_link}")
+    logger.info(f"---------------------------------------------------")
+
+    return jsonify({"success": True, "message": "If that email exists, we sent a reset link!"}), 200
 
 @app.route('/customers')
 def customers_page():
