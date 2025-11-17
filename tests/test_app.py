@@ -3,30 +3,7 @@ import pytest
 from app import app, add_points_transaction, add_points_on_purchase
 from unittest.mock import MagicMock, patch
 from firebase_admin import firestore
-# ✅ NEW IMPORT
-from flask_jwt_extended import create_access_token 
 
-# Initialize Flask App with AUTH TOKEN
-@pytest.fixture
-def client():
-    app.config['TESTING'] = True
-    # Ensure we have a secret key for the tests
-    app.config['JWT_SECRET_KEY'] = 'test-secret-key' 
-    app.config['JWT_TOKEN_LOCATION'] = ['cookies']
-    app.config['JWT_COOKIE_CSRF_PROTECT'] = False # Simplify testing
-    
-    with app.test_client() as client:
-        # ✅ Create a Fake Admin Token
-        with app.app_context():
-            access_token = create_access_token(
-                identity="admin@crm.com", 
-                additional_claims={"role": "Admin"}
-            )
-        
-        # ✅ Attach the token to the test client's cookies
-        client.set_cookie('localhost', 'access_token_cookie', access_token)
-        
-        yield client
 
 # Test 1: Test customer creation SUCCESS
 def test_create_customer_success(client):
