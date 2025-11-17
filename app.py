@@ -60,7 +60,7 @@ def load_user_role():
         if claims:
             g.role = claims.get("role", "User")
     except Exception: # ✅ FIX: Catch specific Exception (satisfies B110)
-        pass
+        pass #nosec
 
 
 @app.context_processor

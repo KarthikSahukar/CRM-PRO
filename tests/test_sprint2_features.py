@@ -4,12 +4,6 @@ from app import app
 from unittest.mock import MagicMock, patch
 from firebase_admin import firestore
 
-# --- Fixtures ---
-@pytest.fixture
-def client():
-    app.config['TESTING'] = True
-    with app.test_client() as client:
-        yield client
 
 # --- Tests for Epic 4: Support Tickets (Kaveri) ---
 

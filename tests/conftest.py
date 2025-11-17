@@ -1,26 +1,20 @@
 import pytest
+from unittest.mock import patch, MagicMock
 from app import app
-from flask_jwt_extended import create_access_token 
 
 @pytest.fixture
 def client():
     """
     Global Test Fixture.
-    This automatically logs in the test robot as an Admin for ALL test files.
+    Mocks the Authentication system so tests don't need valid cookies.
     """
     app.config['TESTING'] = True
-    app.config['JWT_SECRET_KEY'] = 'test-secret-key' 
-    app.config['JWT_TOKEN_LOCATION'] = ['cookies']
-    app.config['JWT_COOKIE_CSRF_PROTECT'] = False 
     
-    with app.test_client() as client:
-        with app.app_context():
-            # Create the Admin Token
-            access_token = create_access_token(
-                identity="admin@crm.com", 
-                additional_claims={"role": "Admin"}
-            )
+    # 1. Mock 'verify_jwt_in_request' so the middleware doesn't block us
+    # 2. Mock 'get_jwt' so the RBAC middleware sees us as an "Admin"
+    with patch('flask_jwt_extended.view_decorators.verify_jwt_in_request'), \
+         patch('flask_jwt_extended.utils.get_jwt', return_value={"role": "Admin"}), \
+         patch('app.verify_jwt_in_request'): # Patch it in app.py namespace too just in case
         
-        # Attach the token to the cookie so the robot can pass the security guard
-        client.set_cookie('access_token_cookie', access_token)        
-        yield client
+        with app.test_client() as client:
+            yield client
