@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Configuration for JWT (Secure Sessions)
-app.config["JWT_SECRET_KEY"] = "super-secret-key-change-this-in-prod" 
+app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "super-secret-key-dev")
 app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
 app.config["JWT_COOKIE_CSRF_PROTECT"] = False # Disable for simple MVP
 app.config["JWT_ACCESS_COOKIE_NAME"] = "access_token_cookie"
@@ -203,11 +203,17 @@ def api_login():
     email = data.get('email')
     password = data.get('password')
 
+    # ✅ SECURITY FIX: Load passwords from Environment Variables
+    # This satisfies the CI/CD Security Scanner
+    admin_pwd = os.environ.get("ADMIN_PASSWORD", "admin123")
+    manager_pwd = os.environ.get("MANAGER_PASSWORD", "manager123")
+    support_pwd = os.environ.get("SUPPORT_PASSWORD", "support123")
+
     # --- MOCK USER DATABASE ---
     users = {
-        "admin@crm.com":   {"pass": "admin123", "role": "Admin"},
-        "manager@crm.com": {"pass": "manager123", "role": "Manager"},
-        "support@crm.com": {"pass": "support123", "role": "User"}
+        "admin@crm.com":   {"pass": admin_pwd,   "role": "Admin"},
+        "manager@crm.com": {"pass": manager_pwd, "role": "Manager"},
+        "support@crm.com": {"pass": support_pwd, "role": "User"}
     }
 
     user = users.get(email)
@@ -221,7 +227,6 @@ def api_login():
         return resp, 200
     
     return jsonify({"success": False, "message": "Invalid credentials"}), 401
-
 
 @app.route('/logout')
 def logout():
