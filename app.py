@@ -12,6 +12,11 @@ import time  # Added for Epic 9 Monitoring
 import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, request, jsonify, render_template, g  # Added 'g' for monitoring context
+from flask_jwt_extended import (
+    JWTManager, create_access_token, jwt_required, 
+    get_jwt_identity, set_access_cookies, unset_jwt_cookies, verify_jwt_in_request
+)
+from flask import make_response, redirect, url_for #for epic 1 
 
 # --- Logging Configuration (Updated for Epic 9 UI) ---
 # Create a file handler to store logs so the System Monitor page can read them
@@ -30,6 +35,31 @@ logger = logging.getLogger(__name__)
 # Initialize Flask App
 app = Flask(__name__)
 
+# Configuration for JWT (Secure Sessions)
+app.config["JWT_SECRET_KEY"] = "super-secret-key-change-this-in-prod" 
+app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
+app.config["JWT_COOKIE_CSRF_PROTECT"] = False # Disable for simple MVP
+app.config["JWT_ACCESS_COOKIE_NAME"] = "access_token_cookie"
+
+jwt = JWTManager(app)
+
+# Middleware: Protect Pages (Epic 1)
+# This forces the user to Login if they try to access pages without a token
+@app.before_request
+def check_auth():
+    # List of routes that do NOT require login
+    public_endpoints = ['login_page', 'api_login', 'static']
+    
+    if request.endpoint in public_endpoints or request.endpoint is None:
+        return
+    
+    # For all other routes, check for the token
+    try:
+        verify_jwt_in_request()
+    except:
+        # If validation fails, redirect to login
+        return redirect(url_for('login_page'))
+
 # --- Middleware: Performance Monitoring (Epic 9) ---
 # This satisfies the "System performance" and "Monitoring" requirements
 @app.before_request
@@ -43,6 +73,11 @@ def log_request(response):
     if request.path.startswith('/static'):
         return response
     
+    # --- FIX: Check if 'start' exists before doing math ---
+    if not hasattr(g, 'start'):
+        return response
+    # ----------------------------------------------------
+
     now = time.time()
     duration = round(now - g.start, 4)
     
@@ -127,6 +162,40 @@ def dashboard():
 def login_page():
     """Render the login page."""
     return render_template('login.html')
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """
+    Epic 1: Handle User Login
+    Verifies credentials and issues a JWT Token in a secure cookie.
+    """
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+
+    # --- HARDCODED ADMIN USER (For Sprint 1 Demo) ---
+    # In Sprint 2, we will connect this to a 'users' collection in Firestore
+    admin_email = "admin@crm.com"
+    admin_pass = "admin123"
+
+    if email == admin_email and password == admin_pass:
+        # Create the token
+        access_token = create_access_token(identity=email, additional_claims={"role": "Admin"})
+        
+        # Create a response that sets the cookie automatically
+        resp = jsonify({"success": True, "message": "Login successful"})
+        set_access_cookies(resp, access_token)
+        return resp, 200
+    
+    return jsonify({"success": False, "message": "Invalid email or password"}), 401
+
+@app.route('/logout')
+def logout():
+    """Logs the user out by clearing cookies."""
+    resp = make_response(redirect(url_for('login_page')))
+    unset_jwt_cookies(resp)
+    return resp
+
 
 @app.route('/customers')
 def customers_page():
