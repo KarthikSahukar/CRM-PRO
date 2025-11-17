@@ -65,8 +65,9 @@ def test_login_route(client):
     response = client.get('/login')
     assert response.status_code == 200
     assert response.content_type == 'text/html; charset=utf-8'
-    # Fixed assertion to check for a unique element on login.html
-    assert b"<h2>CRM Login</h2>" in response.data 
+    
+    # ✅ FIX: Look for the NEW text on your page
+    assert b"Welcome Back" in response.data 
     assert b"Dashboard Overview" not in response.data
 
 # Test 6: Test create_customer endpoint for 500 error
