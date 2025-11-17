@@ -13,54 +13,58 @@ def test_generate_referral_code_logic():
 
 def test_get_db_helpers(mocker):
     mocker.patch('app._init_firestore_client', return_value="MockDB")
+    # Call twice to check caching
     db1 = get_db()
     db2 = get_db()
     assert db1 == "MockDB"
 
 # --- TEST 2: System Monitor ---
 def test_monitor_routes(client, mocker):
+    # 1. Normal load
     resp = client.get('/monitor')
     assert resp.status_code == 200
     
+    # 2. Log file exists
     with patch('os.path.exists', return_value=True):
-        mock_open = mocker.mock_open(read_data="Log Entry 1")
+        # Mock opening the file
+        mock_open = mocker.mock_open(read_data="Line 1\nLine 2")
         with patch('builtins.open', mock_open):
             resp = client.get('/api/logs')
             assert resp.status_code == 200
+            assert "Line 1" in str(resp.data)
 
+    # 3. Log file missing
     with patch('os.path.exists', return_value=False):
         resp = client.get('/api/logs')
         assert resp.status_code == 200
+        assert resp.json['logs'] == []
 
-# --- TEST 3: Middleware (The Safer Way) ---
-def test_middleware_natural_trigger(client, mocker):
+# --- TEST 3: Middleware Logic (The Safe Way) ---
+def test_middleware_logic(client, mocker):
     """
-    Instead of mocking internals, we disable testing mode 
-    and hit a real URL to force middleware to run.
+    We temporarily disable Testing Mode to force the 
+    Authentication Middleware to actually run and fail.
     """
-    # 1. Define a temporary route to hit
-    @app.route('/coverage_test_route')
-    def coverage_test():
-        return "OK"
-
-    # 2. Temporarily turn off TESTING so middleware actually runs
-    # (We use a try/finally block to ensure we reset it)
+    # 1. Save the original setting
     original_testing = app.config['TESTING']
-    app.config['TESTING'] = False
-
+    
     try:
-        # Mock the JWT verifier to fail (Triggering the 'except' block in middleware)
-        mocker.patch('app.verify_jwt_in_request', side_effect=Exception("Force Fail"))
-        
-        # This request will trigger 'check_auth', fail verification, and redirect
-        client.get('/coverage_test_route')
+        # 2. Turn OFF Test Mode -> This activates the Security Guard
+        app.config['TESTING'] = False
 
-        # Now Mock get_jwt to return data (Triggering 'load_user_role' logic)
-        mocker.patch('app.verify_jwt_in_request', return_value=None) # Success now
-        mocker.patch('app.get_jwt', return_value={"role": "User"})
+        # Scenario A: Access protected page WITHOUT token
+        # This triggers the 'except' block in check_auth -> Redirects to login
+        response = client.get('/customers')
+        assert response.status_code == 302  # Redirect found!
         
-        client.get('/coverage_test_route')
+        # Scenario B: Simulate a "User" role loading
+        # We mock the internals so we don't need a real cookie
+        mocker.patch('app.verify_jwt_in_request', return_value=None) # Pass check
+        mocker.patch('app.get_jwt', return_value={"role": "TestUser"})
+        
+        # Hitting login (public page) runs 'load_user_role' but skips 'check_auth'
+        client.get('/login')
 
     finally:
-        # ALWAYS restore testing mode so other tests don't break
+        # 3. IMPORTANT: Restore Test Mode so other tests don't break
         app.config['TESTING'] = original_testing
