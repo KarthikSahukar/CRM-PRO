@@ -5,20 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}CRM Dashboard{% endblock %}</title>
 
-    <!-- ✅ Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
 
-    <!-- ✅ Flask dynamic static path for CSS -->
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/main.css') }}"
     />
 
-    <!-- ✅ Set theme early -->
     <script>
       (function () {
         const theme = localStorage.getItem("theme");
@@ -32,7 +29,6 @@
   </head>
 
   <body>
-    <!-- ✅ Sidebar -->
     <div class="sidebar">
       <div class="sidebar-header">
         <h2>CRM Pro</h2>
@@ -68,7 +64,15 @@
           class="nav-item {% if request.path == '/sales' %}active{% endif %}"
           >Sales</a
         >
-        {% endif %} {% if current_role == 'Admin' %}
+
+        <a
+          href="/campaigns"
+          class="nav-item {% if request.path.startswith('/campaigns') %}active{% endif %}"
+          >Campaigns</a
+        >
+        {% endif %} 
+        
+        {% if current_role == 'Admin' %}
         <a
           href="/monitor"
           class="nav-item {% if request.path == '/monitor' %}active{% endif %}"
@@ -78,12 +82,11 @@
       </nav>
 
       <div class="sidebar-footer">
-        <a href="/login" class="nav-item">Logout</a>
+        <a href="/logout" class="nav-item">Logout</a>
         <button id="theme-toggle" aria-label="Toggle theme">&#9790;</button>
       </div>
     </div>
 
-    <!-- ✅ Main Content Area -->
     <div class="main-content">
       <header class="main-header">
         <h1>{% block page_header %}{% endblock %}</h1>
@@ -92,11 +95,9 @@
       <main class="content-area">{% block content %}{% endblock %}</main>
     </div>
 
-    <!-- ✅ Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
 
-    <!-- ✅ Flask dynamic static path for JS -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
       src="{{ url_for('static', filename='js/script.js') }}"
