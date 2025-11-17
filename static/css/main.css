@@ -1,39 +1,45 @@
 /* --- 1. Root Variables (Theme) --- */
 :root {
-    /* CHANGED: Using Poppins as the primary font */
-    --font-sans: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* ✅ CHANGED: Inter Font for Professional Look */
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     
     /* Light Mode */
-    --bg-sidebar: #172b4d; /* Fallback color */
-    --bg-primary: #f7f8fc; /* Softer white */
+    --bg-sidebar: #172b4d;
+    --bg-primary: #f7f8fc;
     --bg-secondary: #ffffff;
-    --text-primary: #172b4d; /* Darker, more professional blue-black */
+    --text-primary: #172b4d;
     --text-secondary: #5e6c84;
     --text-on-dark: #ffffff;
-    --border-color: #ebecf0; /* Lighter border */
-    --shadow-color: rgba(23, 43, 77, 0.1); /* Softer shadow */
-    --primary-color: #6c63ff; /* New purple primary */
-    --primary-hover: #524acc;
+    --border-color: #ebecf0;
+    --shadow-color: rgba(23, 43, 77, 0.05); /* Softer shadow for lightness */
+    
+    /* ✅ CHANGED: "Money Blue-Teal" (Professional & Trustworthy in Light Mode) */
+    --primary-color: #00B8D9; 
+    --primary-hover: #008DA6;
+    
     --danger-color: #de350b;
 
-    /* CHANGED: Larger border radius for a softer look */
-    --border-radius: 12px; 
+    /* Border Radius */
+    --border-radius: 16px; /* Smooth, modern curves */
     --sidebar-width-desktop: 250px;
     --header-height: 60px;
 }
 
 /* Dark Mode */
 :root.dark-mode {
-    --bg-sidebar: #0e1a2e; /* Fallback color */
-    --bg-primary: #1d1d1d;
-    --bg-secondary: #2a2a2a;
-    --text-primary: #f0f0f0;
-    --text-secondary: #b0b8c5;
+    --bg-sidebar: #0e1a2e;
+    --bg-primary: #0B0E14;  /* Deepest "Void" Black for contrast */
+    --bg-secondary: #151A23; /* Slightly lighter card background */
+    --text-primary: #ffffff;
+    --text-secondary: #94A3B8;
     --text-on-dark: #ffffff;
-    --border-color: #444;
-    --shadow-color: rgba(0, 0, 0, 0.2);
-    --primary-color: #7b74ff; /* Lighter purple for dark mode */
-    --primary-hover: #928dff;
+    --border-color: #2D3748;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    
+    /* ✅ CHANGED: "Electric Sales Teal" (Pops against black) */
+    --primary-color: #22D3EE; 
+    --primary-hover: #67E8F9;
+    
     --danger-color: #ff5b5b;
 }
 
@@ -45,11 +51,11 @@ body, html {
     font-family: var(--font-sans);
     background-color: var(--bg-primary);
     color: var(--text-primary);
-    font-size: 16px;
+    font-size: 15px; /* Slightly smaller Inter looks cleaner */
     box-sizing: border-box;
-    /* Smoother font rendering */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 *, *:before, *:after {
@@ -64,21 +70,21 @@ body, html {
     top: 0;
     left: 0;
     
-    /* CHANGED: Sunset Gradient */
+    /* ✅ KEPT: Your Sunset Gradient */
     background: linear-gradient(180deg, #fd746c 0%, #ff9068 30%, #ff5e62 100%);
     color: var(--text-on-dark);
     
     display: flex;
     flex-direction: column;
     z-index: 1000;
-    transition: transform 0.3s ease;
+    border-right: 1px solid transparent;
 }
 
-/* Dark mode sidebar gets a different gradient */
+/* Dark mode sidebar - Deep Money/Sales Vibe */
 :root.dark-mode .sidebar {
-    background: linear-gradient(180deg, #434343 0%, #222222 100%);
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+    border-right: 1px solid var(--border-color);
 }
-
 
 .main-content {
     margin-left: var(--sidebar-width-desktop);
@@ -100,14 +106,14 @@ body, html {
     left: var(--sidebar-width-desktop);
     width: calc(100% - var(--sidebar-width-desktop));
     z-index: 900;
-    transition: left 0.3s ease, width 0.3s ease;
 }
 
 .main-header h1 {
     font-size: 1.5rem;
-    font-weight: 600; /* Bolder header */
+    font-weight: 700; /* Inter 700 is nice and bold */
     margin: 0;
     color: var(--text-primary);
+    letter-spacing: -0.5px;
 }
 
 .content-area {
@@ -120,14 +126,14 @@ body, html {
     height: var(--header-height);
     display: flex;
     align-items: center;
-    /* Removed border for a cleaner look */
 }
 
 .sidebar-header h2 {
     margin: 0;
     font-size: 1.35rem;
-    font-weight: 600;
+    font-weight: 700;
     color: #fff;
+    letter-spacing: -0.5px;
 }
 
 .sidebar-nav {
@@ -138,355 +144,224 @@ body, html {
 .nav-item {
     display: block;
     padding: 14px 25px;
-    color: var(--text-on-dark);
+    color: rgba(255,255,255,0.8);
     text-decoration: none;
     font-weight: 500;
-    border-left: 4px solid transparent; /* Thicker accent */
-    opacity: 0.9;
-    transition: background-color 0.2s, opacity 0.2s;
+    border-left: 4px solid transparent;
+    transition: all 0.2s;
 }
 
 .nav-item:hover {
+    color: #fff;
     background-color: rgba(255,255,255,0.1);
-    opacity: 1;
 }
 
 .nav-item.active {
-    border-left-color: #ffffff; /* White active border */
     background-color: rgba(255,255,255,0.15);
-    opacity: 1;
+    color: #fff;
     font-weight: 600;
+    border-left-color: #fff;
 }
 
 .sidebar-footer {
     padding: 20px 25px;
-    border-top: 1px solid rgba(255,255,255,0.15);
+    border-top: 1px solid rgba(255,255,255,0.1);
 }
 
-.sidebar-footer .nav-item {
-    padding-left: 0;
-    padding-right: 0;
-    border: none;
-}
-
-.theme-btn {
-    background: rgba(255,255,255,0.15);
-    color: #fff;
+/* Theme Toggle Button */
+#theme-toggle {
+    background: rgba(255,255,255,0.2);
     border: 1px solid rgba(255,255,255,0.3);
-    padding: 10px 14px;
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
+    color: white;
     width: 100%;
-    margin-top: 10px;
-}
-
-.theme-btn:hover {
-    background: rgba(255,255,255,0.25);
-}
-
-/* Dark mode theme button */
-:root.dark-mode .theme-btn {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border-color: var(--border-color);
-}
-
-#mobile-menu-btn {
-    display: none;
-    background: none;
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    padding: 8px 12px;
-    border-radius: var(--border-radius);
+    padding: 10px;
+    border-radius: 8px;
     cursor: pointer;
+    transition: 0.2s;
+}
+#theme-toggle:hover {
+    background: rgba(255,255,255,0.3);
 }
 
+/* --- 5. General Components --- */
 
-/* --- 5. General Components (Buttons, Cards, Forms) --- */
+/* BUTTONS - Now using the Teal Variables */
 .btn {
-    padding: 12px 18px; /* Slightly larger */
-    font-size: 0.95rem;
+    padding: 12px 20px;
+    font-size: 0.9rem;
     border: none;
-    border-radius: var(--border-radius);
+    border-radius: 10px;
     cursor: pointer;
     text-decoration: none;
     display: inline-block;
-    font-weight: 600; /* Bolder buttons */
+    font-weight: 600;
     transition: all 0.2s ease;
+    font-family: var(--font-sans);
 }
 
 .btn-primary {
     background-color: var(--primary-color);
-    color: #fff;
-    box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
-}
-.btn-primary:hover {
-    background-color: var(--primary-hover);
-    transform: translateY(-2px); /* Add hover effect */
-    box-shadow: 0 6px 16px rgba(108, 99, 255, 0.4);
+    color: #fff; /* Keep white text on teal */
+    /* If Light Mode, teal is dark enough. If Dark Mode, teal is bright. 
+       Let's make text black in dark mode for readability on neon teal */
 }
 
-.btn-danger {
-    background-color: var(--danger-color);
-    color: #fff;
+/* Specific override for dark mode text contrast on neon buttons */
+:root.dark-mode .btn-primary {
+    color: #000; 
+    font-weight: 700;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(34, 211, 238, 0.3); /* Teal Glow */
 }
 
 .btn-secondary {
-    background-color: var(--bg-secondary);
+    background-color: transparent;
     color: var(--text-primary);
     border: 1px solid var(--border-color);
 }
 .btn-secondary:hover {
-    background-color: var(--bg-primary);
-    border-color: #aaa;
+    border-color: var(--text-secondary);
+    background-color: var(--bg-secondary);
 }
 
 
+/* CARDS - The "Hover Outline" Logic */
 .card {
     background-color: var(--bg-secondary);
-    
-    /* CHANGED: Removed border, using shadow instead */
-    border: none; 
     border-radius: var(--border-radius);
-    padding: 25px; /* More padding */
-    
-    /* CHANGED: Updated shadow */
-    box-shadow: 0 4px 12px var(--shadow-color);
+    padding: 25px;
+    box-shadow: 0 2px 8px var(--shadow-color);
     margin-bottom: 25px;
     
-    /* CHANGED: Add hover effect */
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    /* ✅ Setup for the outline effect */
+    border: 1px solid transparent; 
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px var(--shadow-color);
+    transform: translateY(-5px);
+    /* ✅ THE TEAL OUTLINE */
+    border-color: var(--primary-color); 
+    /* ✅ SUBTLE TEAL GLOW */
+    box-shadow: 0 10px 30px rgba(0, 184, 217, 0.15); 
 }
+/* Stronger glow in dark mode */
+:root.dark-mode .card:hover {
+    box-shadow: 0 10px 30px rgba(34, 211, 238, 0.1); 
+}
+
 
 .card h3 {
     margin-top: 0;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 15px; /* More padding */
-    color: var(--text-primary);
+    margin-bottom: 15px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
     font-weight: 600;
+    border-bottom: none; /* Cleaner look without line */
 }
 
-.form-group {
-    margin-bottom: 15px;
-}
-.form-group label {
-    display: block;
-    margin-bottom: 8px; /* More space */
-    font-weight: 600;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-.form-group input,
-.form-group select,
-.form-group textarea {
+/* Form Inputs */
+.form-group input, .form-group select, .form-group textarea {
     width: 100%;
     padding: 12px;
     border: 1px solid var(--border-color);
-    border-radius: 8px; /* Slightly less rounded than card */
+    border-radius: 10px;
     background-color: var(--bg-primary);
     color: var(--text-primary);
-    font-size: 1rem;
     font-family: var(--font-sans);
 }
 .form-group input:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.2);
-}
-.form-actions {
-    text-align: right;
-    margin-top: 25px;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.2);
 }
 
-/* --- 6. Page-Specific Styles --- */
-
-/* Dashboard Grids */
+/* --- 6. Stat Grid Specifics --- */
 .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 25px;
-    margin-bottom: 25px;
+    margin-bottom: 30px;
 }
-.stat-card h3 {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-}
+
 .stat-card p {
-    font-size: 2.5rem;
-    font-weight: 700; /* Bolder stat number */
-    margin: 10px 0 0;
+    font-size: 2.8rem; /* Big Numbers */
+    font-weight: 700;
+    margin: 5px 0 0;
+    color: var(--text-primary); /* Keep numbers neutral, let outline pop */
+    letter-spacing: -1px;
+}
+
+/* Make the numbers pop with Teal in Dark Mode specifically */
+:root.dark-mode .stat-card p {
     color: var(--primary-color);
 }
-.grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 25px;
-}
-/* Quick Actions list */
-#recent-activity-list {
-    list-style: none;
-    padding-left: 0;
-}
-#recent-activity-list li {
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.95rem;
-}
-#recent-activity-list li:last-child {
-    border-bottom: none;
-}
 
-
-/* Customers Page */
-.page-actions {
-    margin-bottom: 20px;
-    text-align: right;
-}
-
-.table-container {
-    overflow-x: auto;
-}
-
-#customers-table {
+/* --- 7. Tables --- */
+table {
     width: 100%;
     border-collapse: collapse;
-    /* CHANGED: Remove cell borders for a cleaner look */
 }
-
-#customers-table th,
-#customers-table td {
-    padding: 16px 15px;
-    border-bottom: 1px solid var(--border-color);
+th, td {
+    padding: 15px;
     text-align: left;
-    white-space: nowrap;
-    font-size: 0.95rem;
+    border-bottom: 1px solid var(--border-color);
 }
-
-#customers-table th {
-    background-color: var(--bg-primary);
-    font-weight: 600;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
+th {
+    font-size: 0.8rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    font-weight: 600;
 }
 
-/* Table row hover */
-#customers-table tbody tr:hover {
-    background-color: var(--bg-primary);
+/* --- Responsive --- */
+@media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); }
+    .main-content { margin-left: 0; width: 100%; }
+    .main-header { left: 0; width: 100%; }
 }
 
-#customers-table .action-btn {
-    padding: 6px 10px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    margin-right: 5px;
-    border-radius: 8px;
+/* --- 8. Chart Fixes (Prevents infinite growing) --- */
+canvas {
+    max-width: 100%;
 }
 
-/* Modal Styles */
+#resolution-chart {
+    height: 200px !important;
+    max-height: 220px;
+}
+
+#sales-chart {
+    max-height: 260px !important;
+}
+
+/* --- 9. Modal Styles (Restoring from previous version) --- */
 .modal-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 0; left: 0; width: 100%; height: 100%;
     background-color: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     z-index: 2000;
 }
-
 .modal {
     background: var(--bg-secondary);
     border-radius: var(--border-radius);
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-    /* Add a little animation */
-    transform: scale(0.95);
-    animation: modal-pop 0.2s ease forwards;
+    width: 90%; max-width: 500px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    padding: 20px;
 }
-
-@keyframes modal-pop {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-}
-
 .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 25px;
+    display: flex; justify-content: space-between; align-items: center;
     border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px; margin-bottom: 15px;
 }
-
-.modal-header h3 {
-    margin: 0;
-    font-weight: 600;
-}
-
 .modal-close {
-    background: none;
-    border: none;
-    font-size: 1.75rem;
-    font-weight: 400;
-    cursor: pointer;
-    color: var(--text-secondary);
-}
-
-.modal-body {
-    padding: 25px;
-}
-
-
-/* --- 7. Responsive Styles (Mobile) --- */
-@media (max-width: 768px) {
-    .sidebar {
-        transform: translateX(-100%);
-        z-index: 3000;
-    }
-    
-    body.sidebar-open .sidebar {
-        transform: translateX(0);
-    }
-
-    .main-content {
-        margin-left: 0;
-        width: 100%;
-    }
-    
-    .main-header {
-        left: 0;
-        width: 100%;
-    }
-    
-    #mobile-menu-btn {
-        display: block;
-    }
-    
-    .content-area {
-        padding: 15px;
-    }
-    
-    .grid {
-        grid-template-columns: 1fr;
-    }
-    
-}
-#resolution-chart {
-    height: 200px !important;   /* smaller graph */
-    max-height: 220px;
-}
-#sales-chart {
-    max-height: 260px !important;
+    background: none; border: none; font-size: 1.5rem;
+    color: var(--text-secondary); cursor: pointer;
 }

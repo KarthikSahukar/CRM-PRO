@@ -3,11 +3,6 @@ import pytest
 from app import app
 from unittest.mock import MagicMock, patch
 
-@pytest.fixture
-def client():
-    app.config['TESTING'] = True
-    with app.test_client() as client:
-        yield client
 
 # --- Tests for Epic 8: GDPR/DPDP (Karthik) ---
 

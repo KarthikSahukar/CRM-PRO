@@ -4,12 +4,7 @@ from app import app
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
 
-# --- Fixtures ---
-@pytest.fixture
-def client():
-    app.config['TESTING'] = True
-    with app.test_client() as client:
-        yield client
+
 
 # --- Tests for Epic 6: Dashboard & KPIs (Kavana) ---
 
