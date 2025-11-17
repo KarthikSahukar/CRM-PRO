@@ -22,6 +22,5 @@ def client():
             )
         
         # Attach the token to the cookie so the robot can pass the security guard
-        client.set_cookie('localhost', 'access_token_cookie', access_token)
-        
+        client.set_cookie('access_token_cookie', access_token)        
         yield client

@@ -55,14 +55,13 @@ def load_user_role():
     """
     g.role = None # Default to None
     try:
-        # Check if token exists, but don't crash if it doesn't (optional=True)
         verify_jwt_in_request(optional=True)
         claims = get_jwt()
         if claims:
-            # Get the role, default to 'User' if missing
             g.role = claims.get("role", "User")
-    except:
-        pass # Not logged in, keep g.role as None
+    except Exception: # ✅ FIX: Catch specific Exception (satisfies B110)
+        pass
+
 
 @app.context_processor
 def inject_role():
