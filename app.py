@@ -1257,6 +1257,122 @@ def get_system_logs():
         logger.exception("Error reading log file")
         return jsonify({"logs": ["Error reading logs."]}), 500
 
+@app.route('/campaigns')
+def campaigns_page():
+    """Render the marketing campaigns dashboard."""
+    return render_template('campaigns.html')
+
+# --- API Routes (Epic 7: Marketing Engine) ---
+
+@app.route('/api/campaigns', methods=['GET', 'POST'])
+def campaigns_endpoint():
+    """
+    Handles creating new campaigns (Email/SMS) and listing past ones.
+    Fulfills stories: Create/Schedule, Send SMS, Segment Customers.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        # --- GET: Fetch History ---
+        if request.method == 'GET':
+            campaigns = []
+            # Get campaigns sorted by newest first
+            docs = db_conn.collection('campaigns').order_by('created_at', direction=firestore.Query.DESCENDING).stream()
+            for doc in docs:
+                data = doc.to_dict()
+                data['id'] = doc.id
+                campaigns.append(data)
+            return jsonify(campaigns), 200
+
+        # --- POST: Create & Send ---
+        data = request.get_json()
+        
+        # 1. Validation
+        if not data.get('name') or not data.get('message'):
+            return jsonify({"error": "Campaign Name and Message are required"}), 400
+
+        channel = data.get('type', 'Email') # Email or SMS
+        segment = data.get('segment', 'All') # All, VIP, New
+
+        # 2. Simulate "Segmentation" (Count the audience)
+        # In a real app, this would run a complex query. For MVP, we mock logic.
+        audience_count = 0
+        if segment == 'All':
+            # Count actual customers in DB
+            audience_count = len(list(db_conn.collection('customers').stream()))
+        elif segment == 'VIP':
+            audience_count = 5 # Mock count
+        else:
+            audience_count = 12 # Mock count
+
+        # 3. Simulate "Sending" (The 'Send SMS/Email' Story)
+        # We log this to the terminal so you can prove it works during the demo.
+        logger.info(f"🚀 [MARKETING SIMULATION] Sending {channel.upper()} blast...")
+        logger.info(f"   Target: {segment} Customers ({audience_count} recipients)")
+        logger.info(f"   Subject: {data.get('name')}")
+        logger.info(f"   Message Body: {data.get('message')}")
+        
+        # 4. Save to Database (So it shows in the table)
+        new_campaign = {
+            "name": data['name'],
+            "type": channel,
+            "segment": segment,
+            "status": "Sent",
+            "audience_size": audience_count,
+            # Story: Track open rates (We start at 0, and update later)
+            "open_rate": 0, 
+            "click_rate": 0,
+            "created_at": firestore.SERVER_TIMESTAMP
+        }
+        
+        db_conn.collection('campaigns').add(new_campaign)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"{channel} Campaign sent to {audience_count} customers!",
+            "audience": audience_count
+        }), 201
+
+    except Exception:
+        logger.exception("Marketing Error")
+        return jsonify({"error": "Failed to process campaign"}), 500
+    
+@app.route('/api/campaign/<string:campaign_id>/simulate-open', methods=['POST'])
+def simulate_campaign_open(campaign_id):
+    """
+    Story: Track open and click-through rates.
+    Simulates a user opening an email, updating the stats in real-time.
+    """
+    try:
+        try:
+            db_conn = get_db_or_raise()
+        except RuntimeError as err:
+            return jsonify({"error": str(err)}), 503
+
+        campaign_ref = db_conn.collection('campaigns').document(campaign_id)
+        doc = campaign_ref.get()
+        
+        if not doc.exists:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # Increment Open Rate (Randomly add 5-15% for demo purposes)
+        current_open = doc.to_dict().get('open_rate', 0)
+        new_open = min(current_open + secrets.randbelow(15) + 5, 100) # Max 100%
+        
+        campaign_ref.update({
+            'open_rate': new_open,
+            'click_rate': int(new_open * 0.4) # Clicks are usually ~40% of opens
+        })
+
+        return jsonify({"success": True, "new_open_rate": new_open}), 200
+
+    except Exception:
+        logger.exception("Error simulating open rate")
+        return jsonify({"error": "Server Error"}), 500
+
 
 if __name__ == "__main__":
     app.run()

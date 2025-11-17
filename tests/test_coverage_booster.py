@@ -529,3 +529,85 @@ def test_batch_operations(client, mocker):
         mock_ref.id = f"ticket-{i}"
         mock_db.collection.return_value.document.return_value = mock_ref
         resp = client.post('/api/tickets', json={"customer_id": "cust-1", "issue": f"Issue {i}", "priority": "Medium"})
+
+
+# --- TEST: Marketing Campaigns (Epic 7) ---
+def test_campaigns_full_workflow(client, mocker):
+    """Test all campaign endpoints to boost coverage."""
+    mock_db = mocker.MagicMock()
+    mocker.patch('app.get_db', return_value=mock_db)
+    
+    # 1. GET campaigns (empty)
+    mock_db.collection.return_value.order_by.return_value.stream.return_value = []
+    resp = client.get('/api/campaigns')
+    assert resp.status_code == 200
+    
+    # 2. POST create campaign - success
+    mock_ref = mocker.MagicMock()
+    mock_ref.id = "campaign-123"
+    mock_db.collection.return_value.add.return_value = (None, mock_ref)
+    mock_db.collection.return_value.stream.return_value = []  # For audience count
+    
+    resp = client.post('/api/campaigns', json={
+        "name": "Test Campaign",
+        "type": "Email",
+        "segment": "All",
+        "message": "Test message"
+    })
+    assert resp.status_code == 201
+    
+    # 3. POST create campaign - validation error
+    resp = client.post('/api/campaigns', json={"name": "Missing Message"})
+    assert resp.status_code == 400
+    
+    # 4. POST create campaign - different segments
+    for segment in ['VIP', 'New']:
+        resp = client.post('/api/campaigns', json={
+            "name": f"{segment} Campaign",
+            "type": "SMS",
+            "segment": segment,
+            "message": "Test"
+        })
+    
+    # 5. Simulate open
+    mock_doc = mocker.MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {"open_rate": 10, "click_rate": 4}
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+    
+    resp = client.post('/api/campaign/campaign-123/simulate-open')
+    assert resp.status_code == 200
+    
+    # 6. Simulate open - not found
+    mock_doc.exists = False
+    resp = client.post('/api/campaign/fake-id/simulate-open')
+    assert resp.status_code == 404
+
+
+def test_campaigns_html_page(client):
+    """Test the campaigns page loads."""
+    resp = client.get('/campaigns')
+    assert resp.status_code == 200
+    assert b"CRM Pro" in resp.data
+
+
+def test_campaign_audience_counting(client, mocker):
+    """Test different audience segments."""
+    mock_db = mocker.MagicMock()
+    mocker.patch('app.get_db', return_value=mock_db)
+    
+    # Mock customer collection for 'All' segment
+    mock_customers = [mocker.MagicMock() for _ in range(15)]
+    mock_db.collection.return_value.stream.return_value = mock_customers
+    mock_db.collection.return_value.add.return_value = (None, mocker.MagicMock())
+    
+    resp = client.post('/api/campaigns', json={
+        "name": "All Customers Campaign",
+        "type": "Email",
+        "segment": "All",
+        "message": "Hello everyone"
+    })
+    
+    assert resp.status_code == 201
+    data = resp.json
+    assert data['audience'] == 15  # Should count actual customers
