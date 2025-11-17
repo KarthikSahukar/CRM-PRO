@@ -5,3 +5,4 @@ pytest-mock
 pytest-cov
 pylint
 bandit
+flask-jwt-extended
