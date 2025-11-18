@@ -7,33 +7,28 @@ on:
     branches: [ main ]
 
 jobs:
-  # Job 1: Build the project
+  # Job 1: Build
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
       - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
           python-version: 3.9
-          cache: 'pip' # Cache dependencies
-
+          cache: 'pip'
       - name: Create Firebase Service Account Key
         run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" > serviceAccountKey.json
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
-      - name: Build - Install Dependencies
-        run: |
-          pip install -r requirements.txt
-
-  # Job 2: Run Linting
-  # Runs in parallel with 'test' and 'security'
+  # Job 2: Lint (Updated to save report)
   lint:
     runs-on: ubuntu-latest
-    needs: build # Requires 'build' to finish first
+    needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -45,13 +40,18 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
       - name: Lint - Run Pylint
-        run: pylint app.py --fail-under=7.5
+        # Saves output to a file so we can zip it later
+        run: pylint app.py --fail-under=7.5 > lint-report.txt
+      - name: Upload Lint Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: lint-report.txt
 
-  # Job 3: Run Security Scan
-  # Runs in parallel with 'test' and 'lint'
+  # Job 3: Security (Updated to save report)
   security:
     runs-on: ubuntu-latest
-    needs: build # Requires 'build' to finish first
+    needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -63,13 +63,18 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
       - name: Security - Run Bandit
-        run: bandit -r app.py -l
+        # Saves output to a JSON file
+        run: bandit -r app.py -l -f json -o security-report.json
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.json
 
-  # Job 4: Run Tests
-  # Runs in parallel with 'lint' and 'security'
+  # Job 4: Test
   test:
     runs-on: ubuntu-latest
-    needs: build # Requires 'build' to finish first
+    needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -86,12 +91,11 @@ jobs:
         run: pip install -r requirements.txt
       - name: Test - Run Pytest
         run: pytest
-      
-  # Job 5: Check Coverage (This is new)
-  # This job *only* runs if 'test' passes.
+
+  # Job 5: Coverage (Updated to save HTML report)
   coverage:
     runs-on: ubuntu-latest
-    needs: test # Requires 'test' to finish first
+    needs: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -103,6 +107,55 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
       - name: Coverage - Run Pytest-Cov
+        # Generates an HTML report folder
+        run: pytest --cov=app --cov-report=html --cov-fail-under=75
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # Job 6: Deploy (The New 5-Mark Step)
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [lint, security, coverage]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      # Download all the reports we just made
+      - name: Download Lint Report
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-report
+          path: reports/lint
+      
+      - name: Download Security Report
+        uses: actions/download-artifact@v4
+        with:
+          name: security-report
+          path: reports/security
+
+      - name: Download Coverage Report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: reports/coverage
+      
+      # Zip everything together
+      - name: Create Deployment Artifact
         run: |
-          # The omit rule is in pytest.ini
-          pytest --cov=app --cov-report=xml --cov-fail-under=75
+          mkdir deployment
+          # Copy source code
+          cp -r app.py requirements.txt pytest.ini static templates tests deployment/
+          # Copy reports
+          cp -r reports deployment/
+          # Zip it
+          zip -r deployment-package.zip deployment
+      
+      # Upload the final zip file
+      - name: Upload Final Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: deployment-package.zip
