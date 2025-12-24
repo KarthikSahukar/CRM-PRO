@@ -9,21 +9,11 @@ This CRM was developed to streamline the end-to-end customer journey—from init
 
 ### 💎 Key Features
 
-* 
-**Customer Lifecycle Management (CRUD):** Complete management of customer profiles and company data.
-
-
-* 
-**Sales Pipeline & Lead Tracking:** Automated lead capture, conversion to opportunities, and sales rep assignment.
-
-
-* 
-**Service Desk:** Support ticketing system with SLA tracking and status management.
-
-
+* **Customer Lifecycle Management (CRUD):** Complete management of customer profiles and company data.
+* **Sales Pipeline & Lead Tracking:** Automated lead capture, conversion to opportunities, and sales rep assignment.
+* **Service Desk:** Support ticketing system with SLA tracking and status management.
 * **Interactive Dashboard:** Real-time KPIs for total customers, open tickets, and new leads.
-* 
-**Security-First Design:** Role-Based Access Control (RBAC) and data encryption.
+* **Security-First Design:** Role-Based Access Control (RBAC) and data encryption.
 
 
 
@@ -31,16 +21,13 @@ This CRM was developed to streamline the end-to-end customer journey—from init
 
 ## 🛠 Tech Stack
 
-* 
-**Frontend:** HTML5, CSS3, JavaScript (Responsive SPA Architecture).
+* **Frontend:** HTML5, CSS3, JavaScript (Responsive SPA Architecture).
 
 
-* 
-**Backend:** Python (Flask).
+* **Backend:** Python (Flask).
 
 
-* 
-**Database & Auth:** Firebase Firestore (NoSQL) and Firebase Authentication.
+* **Database & Auth:** Firebase Firestore (NoSQL) and Firebase Authentication.
 
 
 * **DevOps:** GitHub Actions, Pytest, Pylint, Bandit.
@@ -53,29 +40,12 @@ The core of this project is its **Industry-Standard CI/CD Pipeline**, designed t
 
 ### Pipeline Stages
 
-1. 
-**Build:** Automated environment setup and dependency installation.
-
-
-2. 
-**Test:** Execution of Unit and Integration test suites via `pytest` to ensure functional integrity.
-
-
+1. **Build:** Automated environment setup and dependency installation.
+2. **Test:** Execution of Unit and Integration test suites via `pytest` to ensure functional integrity.
 3. **Coverage:** Strict quality gate requiring **≥75% code coverage**. Pipeline fails if new code is not sufficiently tested.
-
-
-4. 
-**Lint:** Static code analysis using `Pylint` with a required score of **7.5/10** to maintain clean, readable code.
-
-
-5. 
-**Security:** Automated vulnerability scanning using `Bandit` to detect hardcoded secrets and security flaws.
-
-
-6. 
-**Deploy:** Automated creation of a versioned **Deployment Artifact** (.zip) containing source code and all quality reports.
-
-
+4. **Lint:** Static code analysis using `Pylint` with a required score of **7.5/10** to maintain clean, readable code.
+5. **Security:** Automated vulnerability scanning using `Bandit` to detect hardcoded secrets and security flaws.
+6. **Deploy:** Automated creation of a versioned **Deployment Artifact** (.zip) containing source code and all quality reports.
 
 ---
 
@@ -83,12 +53,10 @@ The core of this project is its **Industry-Standard CI/CD Pipeline**, designed t
 
 The project was executed in a series of aggressive 2-week sprints:
 
-* 
-**Sprint 1:** Core Platform Foundation (Auth, Customer CRUD, Support Baseline).
+* **Sprint 1:** Core Platform Foundation (Auth, Customer CRUD, Support Baseline).
 
 
-* 
-**Sprint 2:** Advanced Features (Leads & Opportunities, Dashboards, Security Hardening).
+* **Sprint 2:** Advanced Features (Leads & Opportunities, Dashboards, Security Hardening).
 
 
 
